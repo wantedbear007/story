@@ -150,6 +150,7 @@ code { background:#161b22; padding:2px 6px; border-radius:4px; font-size:0.9em; 
 }
 .toast-success { background:#238636; color:#fff; }
 .toast-error { background:#da3633; color:#fff; }
+.toast-warning { background:#d29922; color:#fff; }
 @keyframes slideUp {
   from { transform:translateY(20px); opacity:0; }
   to { transform:translateY(0); opacity:1; }

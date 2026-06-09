@@ -3,6 +3,8 @@ const App = {
   currentParams: null,
 
   async init() {
+    await this.handleUrlCode();
+
     const token = API.getToken();
     if (token) {
       try {
@@ -17,7 +19,7 @@ const App = {
     }
 
     document.getElementById('login-btn').addEventListener('click', () => this.login());
-    document.getElementById('token-input').addEventListener('keydown', e => {
+    document.getElementById('code-input').addEventListener('keydown', e => {
       if (e.key === 'Enter') this.login();
     });
     document.getElementById('logout-link').addEventListener('click', e => {
@@ -30,12 +32,33 @@ const App = {
     this.route();
   },
 
-  login() {
-    const token = document.getElementById('token-input').value.trim();
-    if (!token) return;
-    API.setToken(token);
-    this.showMain();
-    this.route();
+  async handleUrlCode() {
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (!code) return;
+
+    try {
+      const token = await API.exchangeCode(code);
+      API.setToken(token);
+      window.history.replaceState({}, document.title, window.location.pathname);
+      showToast('Connected!', 'success');
+    } catch (err) {
+      showToast(err.message || 'Invalid or expired code', 'error');
+    }
+  },
+
+  async login() {
+    const code = document.getElementById('code-input').value.trim();
+    if (!code) return;
+
+    try {
+      const token = await API.exchangeCode(code);
+      API.setToken(token);
+      this.showMain();
+      this.route();
+    } catch (err) {
+      showToast(err.message || 'Invalid or expired code', 'error');
+    }
   },
 
   showLogin() {

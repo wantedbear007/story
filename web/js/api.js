@@ -71,4 +71,14 @@ const API = {
 
   // Me
   me() { return this.get('/api/me'); },
+
+  // Auth - exchange a short code for a JWT token
+  async exchangeCode(code) {
+    const res = await fetch(`/api/exchange/${encodeURIComponent(code)}`);
+    const data = await res.json();
+    if (!res.ok) {
+      throw new Error(data.error || 'Invalid code');
+    }
+    return data.token;
+  },
 };
