@@ -21,6 +21,7 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if port > 0 {
 				deps.Cfg.Server.Port = port
+				deps.ApiServer.SetPort(port)
 			}
 			if err := deps.ApiServer.Start(cmd.Context()); err != nil {
 				return fmt.Errorf("web server error: %w", err)

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"net/http"
 	"os/exec"
 	"runtime"
@@ -13,6 +14,7 @@ import (
 	"github.com/anomalyco/story/internal/application/content"
 	"github.com/anomalyco/story/internal/application/entry"
 	"github.com/anomalyco/story/internal/infrastructure/auth"
+	"github.com/anomalyco/story/web"
 )
 
 type Server struct {
@@ -40,6 +42,10 @@ func NewServer(
 	}
 }
 
+func (s *Server) SetPort(port int) {
+	s.port = port
+}
+
 func (s *Server) Start(ctx context.Context) error {
 	mux := http.NewServeMux()
 
@@ -62,8 +68,11 @@ func (s *Server) Start(ctx context.Context) error {
 
 	mux.HandleFunc("GET /api/me", s.authMiddleware(s.handleMe))
 
-	fs := http.FileServer(http.Dir("web"))
-	mux.Handle("/", fs)
+	sub, err := fs.Sub(web.Assets, ".")
+	if err != nil {
+		return fmt.Errorf("web assets: %w", err)
+	}
+	mux.Handle("GET /{path...}", http.FileServer(http.FS(sub)))
 
 	s.httpServer = &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", s.host, s.port),
