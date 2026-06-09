@@ -13,6 +13,9 @@ func newResourceCommand(deps *Dependencies) *cobra.Command {
 		Use:   "resource",
 		Short: "Manage resources",
 		Long:  "Track and manage external resources like URLs, articles, videos, and more.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newResourceAddCommand(deps))

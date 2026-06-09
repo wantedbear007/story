@@ -12,6 +12,9 @@ func newCollectionCommand(deps *Dependencies) *cobra.Command {
 		Use:   "collection",
 		Short: "Manage collections",
 		Long:  "Create, list, and manage collections to organize your entries.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newCollectionCreateCommand(deps))

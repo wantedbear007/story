@@ -15,6 +15,9 @@ func newTargetCommand(deps *Dependencies) *cobra.Command {
 		Long: `Configure publishing destinations for your entries.
 
 Supported targets: twitter, notion, google_doc, blog, markdown`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newTargetCreateCommand(deps))

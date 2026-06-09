@@ -17,6 +17,9 @@ func newTweetCommand(deps *Dependencies) *cobra.Command {
 		Long: `Generate tweets from your learning entries using AI.
 Tweets follow a lifecycle: draft -> reviewing -> approved -> scheduled -> posted.
 Use 'story tweet generate <entry-id>' to create a draft tweet.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newTweetGenerateCommand(deps))

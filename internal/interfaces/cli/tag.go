@@ -12,6 +12,9 @@ func newTagCommand(deps *Dependencies) *cobra.Command {
 		Use:   "tag",
 		Short: "Manage tags",
 		Long:  "Create, list, and manage tags for organizing entries.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newTagCreateCommand(deps))

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bufio"
 	"fmt"
 	"os"
 	"strings"
@@ -16,6 +17,9 @@ func newAuthCommand(deps *Dependencies) *cobra.Command {
 		Use:   "auth",
 		Short: "Manage authentication",
 		Long:  "Register, login, and manage your Story account.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newRegisterCommand(deps))
@@ -31,13 +35,21 @@ func newAuthCommand(deps *Dependencies) *cobra.Command {
 }
 
 func newRegisterCommand(deps *Dependencies) *cobra.Command {
-	var email, password, displayName string
-
 	cmd := &cobra.Command{
 		Use:   "register",
 		Short: "Create a new account",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			resp, err := deps.UserService.Register(cmd.Context(), &user.RegisterRequest{
+			email := promptInput("Email: ")
+			password := promptPassword("Password: ")
+			confirm := promptPassword("Retype password: ")
+
+			if password != confirm {
+				return fmt.Errorf("passwords do not match")
+			}
+
+			displayName := promptInput("Display name: ")
+
+			_, err := deps.UserService.Register(cmd.Context(), &user.RegisterRequest{
 				Email:       email,
 				Password:    password,
 				DisplayName: displayName,
@@ -46,29 +58,36 @@ func newRegisterCommand(deps *Dependencies) *cobra.Command {
 				return fmt.Errorf("registration failed: %w", err)
 			}
 
-			fmt.Printf("Registered as %s (%s)\n", resp.DisplayName, resp.Email)
-			fmt.Println(resp.Message)
+			loginResp, err := deps.AuthService.Login(cmd.Context(), &auth.LoginRequest{
+				Email:      email,
+				Password:   password,
+				DeviceInfo: deviceInfo(),
+				IPAddress:  "127.0.0.1",
+			})
+			if err != nil {
+				return fmt.Errorf("registration succeeded but login failed: %w", err)
+			}
+
+			if err := saveLoginSession(loginResp); err != nil {
+				return fmt.Errorf("registration succeeded but saving session failed: %w", err)
+			}
+
+			fmt.Printf("Registered and logged in as %s (%s)\n", loginResp.User.DisplayName, loginResp.User.Email)
 			return nil
 		},
 	}
-
-	cmd.Flags().StringVarP(&email, "email", "e", "", "Email address (required)")
-	cmd.Flags().StringVarP(&password, "password", "p", "", "Password (min 8 characters)")
-	cmd.Flags().StringVarP(&displayName, "display-name", "n", "", "Display name (required)")
-	cmd.MarkFlagRequired("email")
-	cmd.MarkFlagRequired("password")
-	cmd.MarkFlagRequired("display-name")
 
 	return cmd
 }
 
 func newLoginCommand(deps *Dependencies) *cobra.Command {
-	var email, password string
-
 	cmd := &cobra.Command{
 		Use:   "login",
 		Short: "Login to your account",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			email := promptInput("Email: ")
+			password := promptPassword("Password: ")
+
 			resp, err := deps.AuthService.Login(cmd.Context(), &auth.LoginRequest{
 				Email:      email,
 				Password:   password,
@@ -87,11 +106,6 @@ func newLoginCommand(deps *Dependencies) *cobra.Command {
 			return nil
 		},
 	}
-
-	cmd.Flags().StringVarP(&email, "email", "e", "", "Email address (required)")
-	cmd.Flags().StringVarP(&password, "password", "p", "", "Password (required)")
-	cmd.MarkFlagRequired("email")
-	cmd.MarkFlagRequired("password")
 
 	return cmd
 }
@@ -230,6 +244,9 @@ func newPasswordCommand(deps *Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "password",
 		Short: "Manage your password",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newChangePasswordCommand(deps))
@@ -324,19 +341,19 @@ func deviceInfo() string {
 	return fmt.Sprintf("cli:%s", hostname)
 }
 
-// promptPassword reads a password from stdin without echo.
+// promptPassword reads a password from stdin (no echo).
 func promptPassword(prompt string) string {
 	fmt.Fprint(os.Stderr, prompt)
-	// Read from a raw terminal. For simplicity, read a line.
-	var s string
-	fmt.Scanln(&s)
+	s, _ := lineReader.ReadString('\n')
 	return strings.TrimSpace(s)
 }
 
 // promptInput reads a line from stdin.
 func promptInput(prompt string) string {
 	fmt.Fprint(os.Stderr, prompt)
-	var s string
-	fmt.Scanln(&s)
+	s, _ := lineReader.ReadString('\n')
 	return strings.TrimSpace(s)
 }
+
+// lineReader is a shared buffered reader for stdin.
+var lineReader = bufio.NewReader(os.Stdin)

@@ -14,6 +14,9 @@ func newEntryCommand(deps *Dependencies) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "entry",
 		Short: "Manage learning entries",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newAddCommand(deps))

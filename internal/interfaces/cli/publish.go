@@ -13,6 +13,9 @@ func newPublishCommand(deps *Dependencies) *cobra.Command {
 		Use:   "publish",
 		Short: "Publish entries to external platforms",
 		Long:  "Publish entries to configured targets (Twitter, Notion, Google Docs, blog).",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return cmd.Help()
+		},
 	}
 
 	cmd.AddCommand(newPublishEntryCommand(deps))
