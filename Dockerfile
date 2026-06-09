@@ -20,6 +20,7 @@ RUN adduser -D -h /home/story story
 COPY --from=builder /usr/local/bin/story /usr/local/bin/story
 COPY --from=builder /src/configs /etc/story/configs
 COPY --from=builder /src/migrations /etc/story/migrations
+COPY --from=builder /src/web /home/story/web
 
 USER story
 WORKDIR /home/story
