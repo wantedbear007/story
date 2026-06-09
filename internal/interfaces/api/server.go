@@ -157,6 +157,10 @@ func (s *Server) Start(ctx context.Context) error {
 
 	mux.HandleFunc("GET /api/me", s.authMiddleware(s.handleMe))
 
+	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
+	})
+
 	mux.HandleFunc("GET /api/exchange/{code}", s.handleExchangeCode)
 
 	sub, err := fs.Sub(web.Assets, ".")

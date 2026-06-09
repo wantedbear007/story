@@ -24,6 +24,7 @@ const App = {
     });
     document.getElementById('logout-link').addEventListener('click', e => {
       e.preventDefault();
+      this.stopHeartbeat();
       API.clearToken();
       this.showLogin();
     });
@@ -71,6 +72,38 @@ const App = {
     document.getElementById('login-view').style.display = 'none';
     document.getElementById('main-view').style.display = 'block';
     document.getElementById('nav-bar').style.display = 'flex';
+    this.startHeartbeat();
+  },
+
+  heartbeatInterval: null,
+
+  startHeartbeat() {
+    this.stopHeartbeat();
+    this.heartbeatInterval = setInterval(async () => {
+      try {
+        const res = await fetch('/api/ping');
+        if (!res.ok) throw new Error('server gone');
+      } catch {
+        this.stopHeartbeat();
+        this.showDisconnected();
+      }
+    }, 3000);
+  },
+
+  stopHeartbeat() {
+    if (this.heartbeatInterval) {
+      clearInterval(this.heartbeatInterval);
+      this.heartbeatInterval = null;
+    }
+  },
+
+  showDisconnected() {
+    const content = document.getElementById('page-content');
+    if (content) {
+      content.innerHTML = '<div class="empty-state"><h2>Server Disconnected</h2><p>The dashboard server has shut down. Close this tab.</p></div>';
+    }
+    const nav = document.getElementById('nav-bar');
+    if (nav) nav.style.display = 'none';
   },
 
   route() {
