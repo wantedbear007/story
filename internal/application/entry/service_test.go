@@ -62,7 +62,7 @@ func (m *mockEntryRepo) SoftDelete(ctx context.Context, id uuid.UUID) error {
 
 type mockTagRepo struct {
 	tags    map[uuid.UUID]*domain.Tag
-	entries map[uuid.UUID][]uuid.UUID // entryID -> tagIDs
+	entries map[uuid.UUID][]uuid.UUID
 }
 
 func newMockTagRepo() *mockTagRepo {
@@ -144,10 +144,48 @@ func (m *mockTagRepo) GetEntryTags(ctx context.Context, eid uuid.UUID) ([]*domai
 	return result, nil
 }
 
+type mockResourceRepo struct{}
+
+func newMockResourceRepo() *mockResourceRepo {
+	return &mockResourceRepo{}
+}
+
+func (m *mockResourceRepo) Create(ctx context.Context, r *domain.Resource) error {
+	return nil
+}
+
+func (m *mockResourceRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Resource, error) {
+	return nil, domain.ErrNotFound
+}
+
+func (m *mockResourceRepo) List(ctx context.Context, f domain.ResourceFilter) ([]*domain.Resource, error) {
+	return make([]*domain.Resource, 0), nil
+}
+
+func (m *mockResourceRepo) Update(ctx context.Context, r *domain.Resource) error {
+	return nil
+}
+
+func (m *mockResourceRepo) Delete(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
+func (m *mockResourceRepo) AttachToEntry(ctx context.Context, eid, rid uuid.UUID) error {
+	return nil
+}
+
+func (m *mockResourceRepo) DetachFromEntry(ctx context.Context, eid, rid uuid.UUID) error {
+	return nil
+}
+
+func (m *mockResourceRepo) GetEntryResources(ctx context.Context, eid uuid.UUID) ([]*domain.Resource, error) {
+	return make([]*domain.Resource, 0), nil
+}
+
 func TestService_Create(t *testing.T) {
 	t.Parallel()
 
-	svc := entry.NewService(newMockEntryRepo(), newMockTagRepo())
+	svc := entry.NewService(newMockEntryRepo(), newMockTagRepo(), newMockResourceRepo())
 	userID := uuid.New()
 
 	t.Run("creates entry with basic fields", func(t *testing.T) {
@@ -186,7 +224,7 @@ func TestService_Create(t *testing.T) {
 func TestService_Get(t *testing.T) {
 	t.Parallel()
 
-	svc := entry.NewService(newMockEntryRepo(), newMockTagRepo())
+	svc := entry.NewService(newMockEntryRepo(), newMockTagRepo(), newMockResourceRepo())
 	userID := uuid.New()
 
 	created, _ := svc.Create(context.Background(), userID, entry.CreateEntryRequest{
@@ -216,7 +254,7 @@ func TestService_Get(t *testing.T) {
 func TestService_Delete(t *testing.T) {
 	t.Parallel()
 
-	svc := entry.NewService(newMockEntryRepo(), newMockTagRepo())
+	svc := entry.NewService(newMockEntryRepo(), newMockTagRepo(), newMockResourceRepo())
 	userID := uuid.New()
 
 	created, _ := svc.Create(context.Background(), userID, entry.CreateEntryRequest{
