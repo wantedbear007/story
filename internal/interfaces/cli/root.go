@@ -41,6 +41,8 @@ transforms them into structured knowledge, and publishes to your favorite platfo
 
 Story helps you build your personal knowledge graph from the command line.
 
+GitHub: https://github.com/wantedbear007/story
+Founder: https://github.com/wantedbear007`,
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			if deps != nil && deps.Cfg != nil {
 				if err := deps.Cfg.Validate(); err != nil {
