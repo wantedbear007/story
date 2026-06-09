@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"os"
 
 	"github.com/spf13/cobra"
 )
@@ -23,6 +24,25 @@ Examples:
 				deps.Cfg.Server.Port = port
 				deps.ApiServer.SetPort(port)
 			}
+
+			s, err := loadSession()
+			if err == nil {
+				if err := deps.ApiServer.ValidateToken(s.AccessToken); err != nil {
+					fmt.Fprintf(os.Stderr, "Session expired. Run 'story auth login' first.\n")
+				} else {
+					code, cerr := deps.ApiServer.CreateLoginCode(s.AccessToken)
+					if cerr == nil {
+						host := deps.Cfg.Server.Host
+						if host == "0.0.0.0" {
+							host = "localhost"
+						}
+						url := fmt.Sprintf("http://%s:%d/?code=%s", host, deps.Cfg.Server.Port, code)
+						deps.ApiServer.SetAuthURL(url)
+						fmt.Fprintf(os.Stderr, "Open this URL: %s\n", url)
+					}
+				}
+			}
+
 			if err := deps.ApiServer.Start(cmd.Context()); err != nil {
 				return fmt.Errorf("web server error: %w", err)
 			}

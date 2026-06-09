@@ -2,12 +2,14 @@ package api
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io/fs"
 	"net/http"
 	"os/exec"
 	"runtime"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -17,13 +19,65 @@ import (
 	"github.com/anomalyco/story/web"
 )
 
+type loginCodeEntry struct {
+	token     string
+	expiresAt time.Time
+}
+
+type LoginCodeStore struct {
+	mu    sync.Mutex
+	codes map[string]loginCodeEntry
+}
+
+func NewLoginCodeStore() *LoginCodeStore {
+	return &LoginCodeStore{
+		codes: make(map[string]loginCodeEntry),
+	}
+}
+
+func (s *LoginCodeStore) Create(token string) (string, error) {
+	const charset = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789"
+	b := make([]byte, 6)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	for i := range b {
+		b[i] = charset[int(b[i])%len(charset)]
+	}
+	code := string(b)
+
+	s.mu.Lock()
+	s.codes[code] = loginCodeEntry{
+		token:     token,
+		expiresAt: time.Now().Add(5 * time.Minute),
+	}
+	s.mu.Unlock()
+	return code, nil
+}
+
+func (s *LoginCodeStore) Exchange(code string) (string, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	entry, ok := s.codes[code]
+	if !ok {
+		return "", false
+	}
+	delete(s.codes, code)
+	if time.Now().After(entry.expiresAt) {
+		return "", false
+	}
+	return entry.token, true
+}
+
 type Server struct {
 	host         string
 	port         int
 	tweetService *content.Service
 	entryService *entry.Service
 	jwtService   *auth.JWTTokenService
+	loginCodes   *LoginCodeStore
 	httpServer   *http.Server
+	authURL      string
 }
 
 func NewServer(
@@ -39,11 +93,46 @@ func NewServer(
 		tweetService: tweetService,
 		entryService: entryService,
 		jwtService:   jwtService,
+		loginCodes:   NewLoginCodeStore(),
 	}
 }
 
 func (s *Server) SetPort(port int) {
 	s.port = port
+}
+
+func (s *Server) CreateLoginCode(token string) (string, error) {
+	return s.loginCodes.Create(token)
+}
+
+func (s *Server) ValidateToken(token string) error {
+	_, _, err := s.jwtService.ValidateAccessToken(token)
+	return err
+}
+
+func (s *Server) SetAuthURL(url string) {
+	s.authURL = url
+}
+
+func (s *Server) handleExchangeCode(w http.ResponseWriter, r *http.Request) {
+	code := r.PathValue("code")
+	if code == "" {
+		writeError(w, http.StatusBadRequest, "missing code")
+		return
+	}
+
+	token, ok := s.loginCodes.Exchange(code)
+	if !ok {
+		writeError(w, http.StatusNotFound, "invalid or expired code")
+		return
+	}
+
+	if err := s.ValidateToken(token); err != nil {
+		writeError(w, http.StatusUnauthorized, "session expired, please re-authenticate")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"token": token})
 }
 
 func (s *Server) Start(ctx context.Context) error {
@@ -68,11 +157,13 @@ func (s *Server) Start(ctx context.Context) error {
 
 	mux.HandleFunc("GET /api/me", s.authMiddleware(s.handleMe))
 
+	mux.HandleFunc("GET /api/exchange/{code}", s.handleExchangeCode)
+
 	sub, err := fs.Sub(web.Assets, ".")
 	if err != nil {
 		return fmt.Errorf("web assets: %w", err)
 	}
-	mux.Handle("GET /{path...}", http.FileServer(http.FS(sub)))
+	mux.Handle("GET /{path...}", noCacheMiddleware(http.FileServer(http.FS(sub))))
 
 	s.httpServer = &http.Server{
 		Addr:    fmt.Sprintf("%s:%d", s.host, s.port),
@@ -82,7 +173,11 @@ func (s *Server) Start(ctx context.Context) error {
 	addr := s.httpServer.Addr
 	fmt.Printf("Story dashboard: http://%s\n", addr)
 
-	go openBrowser(fmt.Sprintf("http://%s", addr))
+	browserURL := s.authURL
+	if browserURL == "" {
+		browserURL = fmt.Sprintf("http://%s", addr)
+	}
+	go openBrowser(browserURL)
 
 	go func() {
 		<-ctx.Done()
@@ -173,6 +268,15 @@ func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 
 func writeError(w http.ResponseWriter, status int, msg string) {
 	writeJSON(w, status, map[string]string{"error": msg})
+}
+
+func noCacheMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "no-cache, no-store, must-revalidate")
+		w.Header().Set("Pragma", "no-cache")
+		w.Header().Set("Expires", "0")
+		next.ServeHTTP(w, r)
+	})
 }
 
 func corsMiddleware(next http.Handler) http.Handler {
