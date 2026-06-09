@@ -1,7 +1,12 @@
+# Story Configuration — Foundation
+# ────────────────────────────────
+# All values can be overridden via environment variables:
+#   STORY_<SECTION>_<KEY>  e.g. STORY_DATABASE_HOST
+
 app:
   name: story
-  environment: development
-  log_level: debug
+  environment: development        # development | staging | production
+  log_level: debug                # debug | info | warn | error
 
 server:
   host: 0.0.0.0
@@ -24,24 +29,28 @@ auth:
   refresh_token_ttl: 720h
   password_reset_ttl: 1h
 
-llm:
-  provider: openai  # openai, gemini, ollama, anthropic
-  openai:
-    api_key: "${OPENAI_API_KEY}"
-    model: gpt-4
-  gemini:
-    api_key: "${GEMINI_API_KEY}"
-    model: gemini-pro
-  ollama:
-    base_url: http://localhost:11434
-    model: llama2
-  anthropic:
-    api_key: "${ANTHROPIC_API_KEY}"
-    model: claude-3-opus-20240229
+# ────────────────────────────────
+# Feature specific configuration (optional during foundation)
+# Uncomment and configure as features are implemented.
 
-smtp:
-  host: localhost
-  port: 1025
-  username: ""
-  password: "${STORY_SMTP_PASSWORD}"
-  from: story@example.com
+# llm:
+#   provider: openai
+#   openai:
+#     api_key: "${OPENAI_API_KEY}"
+#     model: gpt-4
+#   gemini:
+#     api_key: "${GEMINI_API_KEY}"
+#     model: gemini-pro
+#   ollama:
+#     base_url: http://localhost:11434
+#     model: llama2
+#   anthropic:
+#     api_key: "${ANTHROPIC_API_KEY}"
+#     model: claude-3-opus-20240229
+
+# smtp:
+#   host: localhost
+#   port: 1025
+#   username: ""
+#   password: "${STORY_SMTP_PASSWORD}"
+#   from: story@example.com

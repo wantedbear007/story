@@ -1,3 +1,14 @@
+# sqlc configuration
+# Run `sqlc generate` to produce type-safe Go code from SQL queries.
+#
+# Prerequisites:
+#   brew install sqlc
+#
+# Usage:
+#   1. Write SQL queries in internal/infrastructure/repository/queries/
+#   2. Run: sqlc generate
+#   3. Generated code lands in internal/infrastructure/repository/sqlcgen/
+
 version: "2"
 sql:
   - engine: "postgresql"
@@ -12,3 +23,12 @@ sql:
         emit_interface: true
         emit_prepared_queries: false
         emit_exact_table_names: false
+        overrides:
+          - db_type: "timestamptz"
+            go_type:
+              import: "time"
+              type: "Time"
+          - db_type: "uuid"
+            go_type:
+              import: "github.com/google/uuid"
+              type: "UUID"

@@ -1,3 +1,7 @@
+# Story Configuration — Development Defaults
+# Copy this file and adjust for your environment.
+# Secrets should be set via environment variables, never committed.
+
 app:
   name: story
   environment: development
@@ -20,20 +24,3 @@ auth:
   access_token_ttl: 15m
   refresh_token_ttl: 720h
   password_reset_ttl: 1h
-
-llm:
-  provider: ollama
-  ollama:
-    base_url: http://localhost:11434
-    model: llama2
-  openai:
-    model: gpt-4
-  gemini:
-    model: gemini-pro
-  anthropic:
-    model: claude-3-opus-20240229
-
-smtp:
-  host: localhost
-  port: 1025
-  from: story@example.com
