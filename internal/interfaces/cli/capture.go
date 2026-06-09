@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"github.com/google/uuid"
 
 	"github.com/anomalyco/story/internal/application/entry"
 	"github.com/anomalyco/story/internal/domain"
@@ -85,9 +84,4 @@ func readContentFromStdin() (string, error) {
 	return strings.Join(lines, "\n"), nil
 }
 
-// resolveCurrentUserID extracts the authenticated user ID.
-// In production, this reads from a session file or env variable.
-// Future: integrate with a keyring/token store for persistent sessions.
-func resolveCurrentUserID(deps *Dependencies) (uuid.UUID, error) {
-	return uuid.Nil, fmt.Errorf("not yet implemented: session management")
-}
+
