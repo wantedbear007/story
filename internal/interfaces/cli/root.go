@@ -12,6 +12,7 @@ import (
 	"github.com/anomalyco/story/internal/application/content"
 	"github.com/anomalyco/story/internal/application/entry"
 	"github.com/anomalyco/story/internal/application/publishing"
+	"github.com/anomalyco/story/internal/application/raw_entry"
 	"github.com/anomalyco/story/internal/application/resource"
 	"github.com/anomalyco/story/internal/application/tag"
 	"github.com/anomalyco/story/internal/application/user"
@@ -29,6 +30,7 @@ type Dependencies struct {
 	AuthService       *auth.Service
 	ResourceService   *resource.Service
 	TweetService      *content.Service
+	RawEntryService   *raw_entry.Service
 	ApiServer         *api.Server
 }
 
@@ -74,6 +76,9 @@ Founder: https://github.com/wantedbear007`,
 	topLevelPassword(deps, root)
 	topLevelForgotPassword(deps, root)
 	topLevelWhoami(deps, root)
+
+	root.AddCommand(newRawCommand(deps))
+	root.AddCommand(newProcessCommand(deps))
 
 	return root
 }

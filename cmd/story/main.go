@@ -12,6 +12,7 @@ import (
 	"github.com/anomalyco/story/internal/application/content"
 	"github.com/anomalyco/story/internal/application/entry"
 	"github.com/anomalyco/story/internal/application/publishing"
+	"github.com/anomalyco/story/internal/application/raw_entry"
 	"github.com/anomalyco/story/internal/application/resource"
 	"github.com/anomalyco/story/internal/application/tag"
 	appuser "github.com/anomalyco/story/internal/application/user"
@@ -110,6 +111,10 @@ func showFullHelp(args []string) {
 	root.AddCommand(&cobra.Command{
 		Use:   "capture",
 		Short: "Capture a new entry to your second brain",
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "raw",
+		Short: "Capture raw notes without structure",
 	})
 	root.AddCommand(&cobra.Command{
 		Use:   "query",
@@ -236,6 +241,7 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 	entryRepo := repository.NewEntryRepository(app.DB)
 	collectionRepo := repository.NewCollectionRepository(app.DB)
 	resourceRepo := repository.NewResourceRepository(app.DB)
+	rawEntryRepo := repository.NewRawEntryRepository(app.DB)
 
 	userSvc := appuser.NewService(
 		userRepo,
@@ -264,6 +270,7 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 	publishedEntryRepo := repository.NewPublishedEntryRepository(app.DB)
 	publishingSvc := publishing.NewService(publishingTargetRepo, publishedEntryRepo, entryRepo, nil)
 	resourceSvc := resource.NewService(resourceRepo)
+	rawEntrySvc := raw_entry.NewService(rawEntryRepo)
 
 	llmProvider, llmErr := llm.NewProvider(app.Config.LLM)
 	var llmAdapter *llm.CompleteAdapter
@@ -289,6 +296,7 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 		AuthService:       authSvc,
 		ResourceService:   resourceSvc,
 		TweetService:      tweetSvc,
+		RawEntryService:   rawEntrySvc,
 		ApiServer:         apiServer,
 	}
 
