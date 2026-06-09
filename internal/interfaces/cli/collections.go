@@ -24,12 +24,17 @@ func newCollectionCommand(deps *Dependencies) *cobra.Command {
 }
 
 func newCollectionCreateCommand(deps *Dependencies) *cobra.Command {
-	var name, description string
-
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new collection",
+		Long: `Create a new collection interactively.
+
+Example:
+  story collection create`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			name := promptRequired("Collection name")
+			description := promptInput("Description: ")
+
 			userID, err := resolveCurrentUserID(deps)
 			if err != nil {
 				return fmt.Errorf("authentication required: %w", err)
@@ -47,10 +52,6 @@ func newCollectionCreateCommand(deps *Dependencies) *cobra.Command {
 			return nil
 		},
 	}
-
-	cmd.Flags().StringVarP(&name, "name", "n", "", "Collection name (required)")
-	cmd.Flags().StringVarP(&description, "description", "d", "", "Collection description")
-	cmd.MarkFlagRequired("name")
 
 	return cmd
 }

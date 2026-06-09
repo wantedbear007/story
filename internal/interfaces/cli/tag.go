@@ -24,12 +24,17 @@ func newTagCommand(deps *Dependencies) *cobra.Command {
 }
 
 func newTagCreateCommand(deps *Dependencies) *cobra.Command {
-	var name, color string
-
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Create a new tag",
+		Long: `Create a new tag interactively.
+
+Example:
+  story tag create`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			name := promptRequired("Tag name")
+			color := promptInput("Color (hex, e.g. #ff0000): ")
+
 			userID, err := resolveCurrentUserID(deps)
 			if err != nil {
 				return fmt.Errorf("authentication required: %w", err)
@@ -47,10 +52,6 @@ func newTagCreateCommand(deps *Dependencies) *cobra.Command {
 			return nil
 		},
 	}
-
-	cmd.Flags().StringVarP(&name, "name", "n", "", "Tag name (required)")
-	cmd.Flags().StringVarP(&color, "color", "c", "", "Tag color (hex, e.g., #ff0000)")
-	cmd.MarkFlagRequired("name")
 
 	return cmd
 }

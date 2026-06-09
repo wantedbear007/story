@@ -27,15 +27,19 @@ func newResourceCommand(deps *Dependencies) *cobra.Command {
 }
 
 func newResourceAddCommand(deps *Dependencies) *cobra.Command {
-	var rtype, title, url, description string
-
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Add a new resource",
-		Example: `  story resource add --type url --url "https://example.com" --title "Example"
-  story resource add --type github --url "https://github.com/user/repo" --title "My Repo"
-  story resource add --type youtube --url "https://youtu.be/dQw4w9WgXcQ" --title "Video"`,
+		Long: `Add a new resource interactively.
+
+Example:
+  story resource add`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			rtype := promptResourceType()
+			title := promptRequired("Title")
+			url := promptRequired("URL")
+			description := promptInput("Description: ")
+
 			userID, err := resolveCurrentUserID(deps)
 			if err != nil {
 				return err
@@ -57,14 +61,19 @@ func newResourceAddCommand(deps *Dependencies) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&rtype, "type", "t", "url", "Resource type (url, github, article, youtube, pdf, markdown)")
-	cmd.Flags().StringVarP(&title, "title", "", "", "Resource title (required)")
-	cmd.Flags().StringVarP(&url, "url", "u", "", "Resource URL (required)")
-	cmd.Flags().StringVarP(&description, "description", "d", "", "Resource description")
-	cmd.MarkFlagRequired("title")
-	cmd.MarkFlagRequired("url")
-
 	return cmd
+}
+
+func promptResourceType() string {
+	return promptDefault("Resource type (url, github, article, youtube, pdf, markdown)", "url",
+		func(v string) string {
+			switch v {
+			case "url", "github", "article", "youtube", "pdf", "markdown":
+				return v
+			default:
+				return ""
+			}
+		})
 }
 
 func newResourceListCommand(deps *Dependencies) *cobra.Command {

@@ -28,18 +28,19 @@ func newEntryCommand(deps *Dependencies) *cobra.Command {
 }
 
 func newAddCommand(deps *Dependencies) *cobra.Command {
-	var entryType, title, tags, resourceIDs string
-
 	cmd := &cobra.Command{
 		Use:   "add",
 		Short: "Add a new learning entry",
-		Long: `Add a new learning entry. Content is read from stdin.
-Supports types: learning, work_log, resource, engineering_note.
+		Long: `Add a new learning entry interactively. Content is read from stdin.
 
 Examples:
-  story entry add --type learning --title "Go Interfaces" --tags go,patterns
-  story entry add --type work_log --title "Sprint Review" --resource "res-id"`,
+  echo "Go interfaces allow you to define behavior" | story entry add`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			entryType := promptEntryType()
+			title := promptRequired("Title")
+			tags := promptInput("Tags (comma-separated): ")
+			resourceIDs := promptInput("Resource IDs (comma-separated): ")
+
 			content, err := readContentFromStdin()
 			if err != nil {
 				return fmt.Errorf("reading content: %w", err)
@@ -67,42 +68,42 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVarP(&entryType, "type", "t", string(domain.EntryTypeLearning), "Entry type")
-	cmd.Flags().StringVarP(&title, "title", "", "", "Entry title (required)")
-	cmd.Flags().StringVarP(&tags, "tags", "", "", "Comma-separated tags")
-	cmd.Flags().StringVarP(&resourceIDs, "resource", "r", "", "Comma-separated resource IDs")
-	cmd.MarkFlagRequired("title")
-
 	return cmd
 }
 
 func newEditCommand(deps *Dependencies) *cobra.Command {
-	var title, content, tags string
-	var entryType string
-
 	cmd := &cobra.Command{
 		Use:   "edit <entry-id>",
 		Short: "Edit an existing entry",
-		Args:  cobra.ExactArgs(1),
+		Long: `Edit an entry interactively. Leave fields blank to keep current values.
+
+Example:
+  story entry edit <entry-id>`,
+		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			id, err := uuidParse(args[0])
 			if err != nil {
 				return err
 			}
 
-			req := entry.UpdateEntryRequest{
-				Tags: parseCommaList(tags),
-			}
+			req := entry.UpdateEntryRequest{}
 
-			if title != "" {
+			if title := promptInput("Title (leave blank to keep): "); title != "" {
 				req.Title = &title
 			}
-			if content != "" {
+			if entryType := promptInput("Type (leave blank to keep): "); entryType != "" {
+				t := domain.EntryType(entryType)
+				if t != domain.EntryTypeLearning && t != domain.EntryTypeWorkLog &&
+					t != domain.EntryTypeResource && t != domain.EntryTypeEngineeringNote {
+					return fmt.Errorf("invalid type: %s", entryType)
+				}
+				req.Type = &t
+			}
+			if content := promptInput("Content (leave blank to keep): "); content != "" {
 				req.Content = &content
 			}
-			if entryType != "" {
-				t := domain.EntryType(entryType)
-				req.Type = &t
+			if tags := promptInput("Tags (comma-separated, leave blank to keep): "); tags != "" {
+				req.Tags = parseCommaList(tags)
 			}
 
 			resp, err := deps.EntryService.Update(cmd.Context(), id, req)
@@ -114,11 +115,6 @@ func newEditCommand(deps *Dependencies) *cobra.Command {
 			return nil
 		},
 	}
-
-	cmd.Flags().StringVarP(&entryType, "type", "t", "", "Entry type")
-	cmd.Flags().StringVarP(&title, "title", "", "", "New title")
-	cmd.Flags().StringVarP(&content, "content", "c", "", "New content")
-	cmd.Flags().StringVarP(&tags, "tags", "", "", "Comma-separated tags")
 
 	return cmd
 }

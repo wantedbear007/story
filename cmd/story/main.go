@@ -167,6 +167,10 @@ func showFullHelp(args []string) {
 		Use:   "forgot-password",
 		Short: "Request a password reset email",
 	})
+	root.AddCommand(&cobra.Command{
+		Use:   "whoami",
+		Short: "Show current logged-in user",
+	})
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)

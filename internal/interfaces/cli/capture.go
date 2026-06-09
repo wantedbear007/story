@@ -13,31 +13,25 @@ import (
 )
 
 func newCaptureCommand(deps *Dependencies) *cobra.Command {
-	var entryType string
-	var title string
-	var tags string
-
 	cmd := &cobra.Command{
 		Use:   "capture",
 		Short: "Capture a new entry to your second brain",
-		Long: `Capture a new entry. Supports types: learning, work_log, resource, engineering_note.
+		Long: `Capture a new entry interactively. Content is read from stdin.
 
 Examples:
-  story capture --type learning --title "Go Interfaces" --tags go,patterns
-  story capture --type work_log --title "Sprint Review Prep"`,
+  echo "Go interfaces allow you to define behavior" | story capture`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			entryType := promptEntryType()
+			title := promptRequired("Title")
+			tags := promptInput("Tags (comma-separated): ")
+
 			content, err := readContentFromStdin()
 			if err != nil {
 				return fmt.Errorf("reading content: %w", err)
 			}
 
-			tagList := strings.Split(tags, ",")
-			if len(tagList) == 1 && tagList[0] == "" {
-				tagList = nil
-			}
+			tagList := parseCommaList(tags)
 
-			// In production, extract userID from the stored JWT session.
-			// For now we use a placeholder; the real auth middleware will inject it.
 			userID, err := resolveCurrentUserID(deps)
 			if err != nil {
 				return fmt.Errorf("authentication required: %w", err)
@@ -59,12 +53,19 @@ Examples:
 		},
 	}
 
-	cmd.Flags().StringVarP(&entryType, "type", "t", string(domain.EntryTypeLearning), "Entry type (learning, work_log, resource, engineering_note)")
-	cmd.Flags().StringVarP(&title, "title", "", "", "Entry title (required)")
-	cmd.Flags().StringVarP(&tags, "tags", "", "", "Comma-separated tags")
-	cmd.MarkFlagRequired("title")
-
 	return cmd
+}
+
+func promptEntryType() string {
+	return promptDefault("Entry type (learning, work_log, resource, engineering_note)", "learning",
+		func(v string) string {
+			switch v {
+			case "learning", "work_log", "resource", "engineering_note":
+				return v
+			default:
+				return ""
+			}
+		})
 }
 
 func readContentFromStdin() (string, error) {
@@ -83,5 +84,3 @@ func readContentFromStdin() (string, error) {
 	}
 	return strings.Join(lines, "\n"), nil
 }
-
-

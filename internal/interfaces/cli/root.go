@@ -73,6 +73,7 @@ Founder: https://github.com/wantedbear007`,
 	topLevelLogin(deps, root)
 	topLevelPassword(deps, root)
 	topLevelForgotPassword(deps, root)
+	topLevelWhoami(deps, root)
 
 	return root
 }
@@ -293,6 +294,27 @@ func runChangePassword(deps *Dependencies, cmd *cobra.Command) error {
 	}
 
 	fmt.Println("Password changed successfully")
+	return nil
+}
+
+func topLevelWhoami(deps *Dependencies, root *cobra.Command) {
+	root.AddCommand(&cobra.Command{
+		Use:   "whoami",
+		Short: "Show current logged-in user",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runWhoami()
+		},
+	})
+}
+
+func runWhoami() error {
+	s, err := loadSession()
+	if err != nil {
+		fmt.Println("Not logged in")
+		return nil
+	}
+
+	fmt.Printf("Logged in as %s (%s)\n", s.DisplayName, s.Email)
 	return nil
 }
 

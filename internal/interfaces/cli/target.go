@@ -27,19 +27,22 @@ Supported targets: twitter, notion, google_doc, blog, markdown`,
 }
 
 func newTargetCreateCommand(deps *Dependencies) *cobra.Command {
-	var targetType, name string
-
 	cmd := &cobra.Command{
 		Use:   "create",
 		Short: "Configure a new publishing target",
+		Long: `Create a new publishing target interactively.
+
+Example:
+  story target create`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			targetType := promptTargetType()
+			name := promptRequired("Target name")
+
 			userID, err := resolveCurrentUserID(deps)
 			if err != nil {
 				return fmt.Errorf("authentication required: %w", err)
 			}
 
-			// In production, configuration would be prompted or loaded from file.
-			// For now, we create a placeholder config.
 			resp, err := deps.PublishingService.CreateTarget(cmd.Context(), userID, publishing.CreateTargetRequest{
 				Type:   domain.PublishingTargetType(targetType),
 				Name:   name,
@@ -54,12 +57,19 @@ func newTargetCreateCommand(deps *Dependencies) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&targetType, "type", "t", "", "Target type (twitter, notion, google_doc, blog, markdown)")
-	cmd.Flags().StringVarP(&name, "name", "n", "", "Target name (required)")
-	cmd.MarkFlagRequired("type")
-	cmd.MarkFlagRequired("name")
-
 	return cmd
+}
+
+func promptTargetType() string {
+	return promptDefault("Target type (twitter, notion, google_doc, blog, markdown)", "twitter",
+		func(v string) string {
+			switch v {
+			case "twitter", "notion", "google_doc", "blog", "markdown":
+				return v
+			default:
+				return ""
+			}
+		})
 }
 
 func newTargetListCommand(deps *Dependencies) *cobra.Command {

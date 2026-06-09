@@ -25,12 +25,17 @@ func newPublishCommand(deps *Dependencies) *cobra.Command {
 }
 
 func newPublishEntryCommand(deps *Dependencies) *cobra.Command {
-	var entryID, targetID string
-
 	cmd := &cobra.Command{
 		Use:   "entry",
 		Short: "Publish an entry to a target",
+		Long: `Publish an entry to a publishing target interactively.
+
+Example:
+  story publish entry`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			entryID := promptRequired("Entry ID")
+			targetID := promptRequired("Target ID")
+
 			userID, err := resolveCurrentUserID(deps)
 			if err != nil {
 				return fmt.Errorf("authentication required: %w", err)
@@ -62,21 +67,20 @@ func newPublishEntryCommand(deps *Dependencies) *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVarP(&entryID, "entry-id", "e", "", "Entry ID to publish")
-	cmd.Flags().StringVarP(&targetID, "target-id", "t", "", "Publishing target ID")
-	cmd.MarkFlagRequired("entry-id")
-	cmd.MarkFlagRequired("target-id")
-
 	return cmd
 }
 
 func newPublishStatusCommand(deps *Dependencies) *cobra.Command {
-	var entryID string
-
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "status",
 		Short: "Check publish status of an entry",
+		Long: `Check the publish status of an entry interactively.
+
+Example:
+  story publish status`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			entryID := promptRequired("Entry ID")
+
 			eid, err := uuid.Parse(entryID)
 			if err != nil {
 				return fmt.Errorf("invalid entry ID: %w", err)
@@ -102,4 +106,6 @@ func newPublishStatusCommand(deps *Dependencies) *cobra.Command {
 			return nil
 		},
 	}
+
+	return cmd
 }
