@@ -161,6 +161,41 @@ func ExtractCode(err error) Code {
 	return CodeInternal
 }
 
+// ErrNotFound creates a NOT_FOUND error with the given message.
+func ErrNotFound(message string) *Error {
+	return New(CodeNotFound, message)
+}
+
+// ErrAlreadyExists creates an ALREADY_EXISTS error.
+func ErrAlreadyExists(message string) *Error {
+	return New(CodeAlreadyExists, message)
+}
+
+// ErrInvalidInput creates an INVALID_INPUT error.
+func ErrInvalidInput(message string) *Error {
+	return New(CodeInvalidInput, message)
+}
+
+// ErrUnauthorized creates an UNAUTHORIZED error.
+func ErrUnauthorized(message string) *Error {
+	return New(CodeUnauthorized, message)
+}
+
+// ErrForbidden creates a FORBIDDEN error.
+func ErrForbidden(message string) *Error {
+	return New(CodeForbidden, message)
+}
+
+// ErrConflict creates a CONFLICT error.
+func ErrConflict(message string) *Error {
+	return New(CodeConflict, message)
+}
+
+// ErrInternal creates an INTERNAL error.
+func ErrInternal(message string) *Error {
+	return New(CodeInternal, message)
+}
+
 // ValidationErrors aggregates multiple validation failures.
 type ValidationErrors []ValidationError
 

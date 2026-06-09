@@ -52,10 +52,11 @@ func (d DatabaseConfig) DSN() string {
 }
 
 type AuthConfig struct {
-	JWTSecret           string        `yaml:"-"`
-	AccessTokenTTL      time.Duration `yaml:"access_token_ttl"`
-	RefreshTokenTTL     time.Duration `yaml:"refresh_token_ttl"`
-	PasswordResetTTL    time.Duration `yaml:"password_reset_ttl"`
+	JWTSecret            string        `yaml:"-"`
+	AccessTokenTTL       time.Duration `yaml:"access_token_ttl"`
+	RefreshTokenTTL      time.Duration `yaml:"refresh_token_ttl"`
+	PasswordResetTTL     time.Duration `yaml:"password_reset_ttl"`
+	EmailVerificationTTL time.Duration `yaml:"email_verification_ttl"`
 }
 
 type LLMConfig struct {
@@ -123,9 +124,10 @@ func Load(path string) (*Config, error) {
 			MaxIdleConns: 5,
 		},
 		Auth: AuthConfig{
-			AccessTokenTTL:   15 * time.Minute,
-			RefreshTokenTTL:  7 * 24 * time.Hour,
-			PasswordResetTTL: 1 * time.Hour,
+			AccessTokenTTL:       15 * time.Minute,
+			RefreshTokenTTL:      7 * 24 * time.Hour,
+			PasswordResetTTL:     1 * time.Hour,
+			EmailVerificationTTL: 24 * time.Hour,
 		},
 		LLM: LLMConfig{
 			Provider: "openai",

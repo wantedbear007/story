@@ -7,34 +7,45 @@ import (
 	"github.com/google/uuid"
 )
 
-// RefreshToken enables stateless JWT access tokens with stateful refresh.
-// TokenHash stores Argon2 hash of the raw token — never the raw value.
-// Revocation supports explicit logout and compromise response.
-type RefreshToken struct {
-	ID        uuid.UUID  `json:"id"`
-	UserID    uuid.UUID  `json:"user_id"`
-	TokenHash string     `json:"-"`
-	ExpiresAt time.Time  `json:"expires_at"`
-	RevokedAt *time.Time `json:"revoked_at,omitempty"`
-	CreatedAt time.Time  `json:"created_at"`
+// Session represents an authenticated user session.
+// Each login creates one session with a unique refresh token (stored as hash).
+// Sessions can be listed by the user and revoked individually.
+// This replaces the old stateless refresh token model with full session tracking.
+type Session struct {
+	ID         uuid.UUID  `json:"id"`
+	UserID     uuid.UUID  `json:"user_id"`
+	TokenHash  string     `json:"-"`
+	DeviceInfo string     `json:"device_info,omitempty"`
+	IPAddress  string     `json:"ip_address,omitempty"`
+	IsRevoked  bool       `json:"is_revoked"`
+	ExpiresAt  time.Time  `json:"expires_at"`
+	LastUsedAt *time.Time `json:"last_used_at,omitempty"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
-// IsExpired returns true if the token has passed its expiration time.
-func (rt *RefreshToken) IsExpired() bool {
-	return time.Now().After(rt.ExpiresAt)
+// IsExpired returns true if the session has passed its expiration time.
+func (s *Session) IsExpired() bool {
+	return time.Now().After(s.ExpiresAt)
 }
 
-// IsRevoked returns true if the token has been explicitly revoked.
-func (rt *RefreshToken) IsRevoked() bool {
-	return rt.RevokedAt != nil
+// IsActive returns true if the session is neither expired nor revoked.
+func (s *Session) IsActive() bool {
+	return !s.IsExpired() && !s.IsRevoked
 }
 
-// IsValid returns true if the token is neither expired nor revoked.
-func (rt *RefreshToken) IsValid() bool {
-	return !rt.IsExpired() && !rt.IsRevoked()
+// SessionRepository defines persistence contract for Session entities.
+type SessionRepository interface {
+	Create(ctx context.Context, session *Session) error
+	GetByID(ctx context.Context, id uuid.UUID) (*Session, error)
+	GetByTokenHash(ctx context.Context, tokenHash string) (*Session, error)
+	ListByUserID(ctx context.Context, userID uuid.UUID) ([]*Session, error)
+	Revoke(ctx context.Context, id uuid.UUID) error
+	RevokeAllForUser(ctx context.Context, userID uuid.UUID) error
+	UpdateLastUsed(ctx context.Context, id uuid.UUID) error
 }
 
 // PasswordResetToken facilitates secure password reset flows.
+// TokenHash stores the Argon2 hash of the raw token — never the raw value.
 type PasswordResetToken struct {
 	ID        uuid.UUID  `json:"id"`
 	UserID    uuid.UUID  `json:"user_id"`
@@ -44,13 +55,24 @@ type PasswordResetToken struct {
 	CreatedAt time.Time  `json:"created_at"`
 }
 
-type SessionRepository interface {
-	CreateRefreshToken(ctx context.Context, token *RefreshToken) error
-	GetRefreshTokenByHash(ctx context.Context, tokenHash string) (*RefreshToken, error)
-	RevokeRefreshToken(ctx context.Context, id uuid.UUID) error
-	RevokeUserRefreshTokens(ctx context.Context, userID uuid.UUID) error
+// IsExpired returns true if the token has passed its expiration time.
+func (t *PasswordResetToken) IsExpired() bool {
+	return time.Now().After(t.ExpiresAt)
+}
 
-	CreatePasswordResetToken(ctx context.Context, token *PasswordResetToken) error
-	GetPasswordResetTokenByHash(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
-	MarkPasswordResetTokenUsed(ctx context.Context, id uuid.UUID) error
+// IsUsed returns true if the token has been consumed.
+func (t *PasswordResetToken) IsUsed() bool {
+	return t.UsedAt != nil
+}
+
+// IsValid returns true if the token can still be used.
+func (t *PasswordResetToken) IsValid() bool {
+	return !t.IsExpired() && !t.IsUsed()
+}
+
+// PasswordResetRepository defines persistence for password reset tokens.
+type PasswordResetRepository interface {
+	Create(ctx context.Context, token *PasswordResetToken) error
+	GetByTokenHash(ctx context.Context, tokenHash string) (*PasswordResetToken, error)
+	MarkUsed(ctx context.Context, id uuid.UUID) error
 }
