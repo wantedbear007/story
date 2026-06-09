@@ -2,10 +2,12 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os"
 
 	appauth "github.com/anomalyco/story/internal/application/auth"
 	"github.com/anomalyco/story/internal/application/collection"
+	"github.com/anomalyco/story/internal/application/content"
 	"github.com/anomalyco/story/internal/application/entry"
 	"github.com/anomalyco/story/internal/application/publishing"
 	"github.com/anomalyco/story/internal/application/resource"
@@ -14,7 +16,9 @@ import (
 	infraauth "github.com/anomalyco/story/internal/infrastructure/auth"
 	"github.com/anomalyco/story/internal/infrastructure/bootstrap"
 	"github.com/anomalyco/story/internal/infrastructure/email"
+	"github.com/anomalyco/story/internal/infrastructure/llm"
 	"github.com/anomalyco/story/internal/infrastructure/repository"
+	"github.com/anomalyco/story/internal/interfaces/api"
 	"github.com/anomalyco/story/internal/interfaces/cli"
 	"github.com/anomalyco/story/internal/pkg/logger"
 )
@@ -79,6 +83,18 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 	publishingSvc := publishing.NewService(publishingTargetRepo, publishedEntryRepo, entryRepo, nil)
 	resourceSvc := resource.NewService(resourceRepo)
 
+	llmProvider, err := llm.NewProvider(app.Config.LLM)
+	if err != nil {
+		return fmt.Errorf("creating LLM provider: %w", err)
+	}
+	llmAdapter := llm.NewCompleteAdapter(llmProvider)
+
+	tweetRepo := repository.NewTweetRepository(app.DB)
+	promptRepo := repository.NewPromptTemplateRepository(app.DB)
+	tweetSvc := content.NewService(tweetRepo, promptRepo, entryRepo, llmAdapter)
+
+	apiServer := api.NewServer(app.Config.Server.Host, app.Config.Server.Port, tweetSvc, entrySvc, jwtService)
+
 	deps := &cli.Dependencies{
 		Cfg:               app.Config,
 		UserService:       userSvc,
@@ -88,6 +104,8 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 		PublishingService: publishingSvc,
 		AuthService:       authSvc,
 		ResourceService:   resourceSvc,
+		TweetService:      tweetSvc,
+		ApiServer:         apiServer,
 	}
 
 	log.Info("application initialized")

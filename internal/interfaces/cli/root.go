@@ -8,12 +8,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/anomalyco/story/internal/application/auth"
 	"github.com/anomalyco/story/internal/application/collection"
+	"github.com/anomalyco/story/internal/application/content"
 	"github.com/anomalyco/story/internal/application/entry"
 	"github.com/anomalyco/story/internal/application/publishing"
 	"github.com/anomalyco/story/internal/application/resource"
 	"github.com/anomalyco/story/internal/application/tag"
 	"github.com/anomalyco/story/internal/application/user"
 	"github.com/anomalyco/story/internal/infrastructure/config"
+	"github.com/anomalyco/story/internal/interfaces/api"
 )
 
 type Dependencies struct {
@@ -25,6 +27,8 @@ type Dependencies struct {
 	PublishingService *publishing.Service
 	AuthService       *auth.Service
 	ResourceService   *resource.Service
+	TweetService      *content.Service
+	ApiServer         *api.Server
 }
 
 func NewRootCommand(deps *Dependencies) *cobra.Command {
@@ -56,6 +60,8 @@ Story helps you build your personal knowledge graph from the command line.`,
 	root.AddCommand(newConfigCommand(deps))
 	root.AddCommand(newResourceCommand(deps))
 	root.AddCommand(newSearchCommand(deps))
+	root.AddCommand(newTweetCommand(deps))
+	root.AddCommand(newWebCommand(deps))
 
 	return root
 }
