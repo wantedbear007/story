@@ -1,5 +1,6 @@
 # Binaries
 /build/
+/story
 *.exe
 *.test
 *.out

@@ -38,7 +38,7 @@ type DatabaseConfig struct {
 	Port         int    `yaml:"port"`
 	Name         string `yaml:"name"`
 	User         string `yaml:"user"`
-	Password     string `yaml:"-"`
+	Password     string `yaml:"password"`
 	SSLMode      string `yaml:"ssl_mode"`
 	MaxOpenConns int    `yaml:"max_open_conns"`
 	MaxIdleConns int    `yaml:"max_idle_conns"`
@@ -52,7 +52,7 @@ func (d DatabaseConfig) DSN() string {
 }
 
 type AuthConfig struct {
-	JWTSecret            string        `yaml:"-"`
+	JWTSecret            string        `yaml:"jwt_secret"`
 	AccessTokenTTL       time.Duration `yaml:"access_token_ttl"`
 	RefreshTokenTTL      time.Duration `yaml:"refresh_token_ttl"`
 	PasswordResetTTL     time.Duration `yaml:"password_reset_ttl"`
@@ -68,12 +68,12 @@ type LLMConfig struct {
 }
 
 type OpenAILLMConfig struct {
-	APIKey string `yaml:"-"`
+	APIKey string `yaml:"api_key"`
 	Model  string `yaml:"model"`
 }
 
 type GeminiLLMConfig struct {
-	APIKey string `yaml:"-"`
+	APIKey string `yaml:"api_key"`
 	Model  string `yaml:"model"`
 }
 
@@ -83,7 +83,7 @@ type OllamaLLMConfig struct {
 }
 
 type AnthropicLLMConfig struct {
-	APIKey string `yaml:"-"`
+	APIKey string `yaml:"api_key"`
 	Model  string `yaml:"model"`
 }
 
@@ -91,7 +91,7 @@ type SMTPConfig struct {
 	Host     string `yaml:"host"`
 	Port     int    `yaml:"port"`
 	Username string `yaml:"username"`
-	Password string `yaml:"-"`
+	Password string `yaml:"password"`
 	From     string `yaml:"from"`
 }
 

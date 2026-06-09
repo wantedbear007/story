@@ -53,6 +53,8 @@ func NewProvider(cfg config.LLMConfig) (Provider, error) {
 		return NewOllamaProvider(cfg.Ollama)
 	case "anthropic":
 		return NewAnthropicProvider(cfg.Anthropic)
+	case "":
+		return nil, fmt.Errorf("LLM provider not configured: %w", ErrProviderNotAvailable)
 	default:
 		return nil, fmt.Errorf("unsupported LLM provider: %s", cfg.Provider)
 	}
