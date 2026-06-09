@@ -464,6 +464,10 @@ func (s *Service) logAudit(ctx context.Context, tweetID uuid.UUID, action string
 }
 
 func (s *Service) generateWithRetry(ctx context.Context, prompt string, maxTokens int) (*GenerateResult, error) {
+	if s.provider == nil {
+		return nil, fmt.Errorf("LLM provider not configured: set STORY_LLM_OPENAI_API_KEY (or Gemini/Anthropic) in environment")
+	}
+
 	start := time.Now()
 	var lastErr error
 	var retries int

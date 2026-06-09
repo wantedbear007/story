@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	appauth "github.com/anomalyco/story/internal/application/auth"
@@ -83,11 +82,13 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 	publishingSvc := publishing.NewService(publishingTargetRepo, publishedEntryRepo, entryRepo, nil)
 	resourceSvc := resource.NewService(resourceRepo)
 
-	llmProvider, err := llm.NewProvider(app.Config.LLM)
-	if err != nil {
-		return fmt.Errorf("creating LLM provider: %w", err)
+	llmProvider, llmErr := llm.NewProvider(app.Config.LLM)
+	var llmAdapter *llm.CompleteAdapter
+	if llmErr != nil {
+		log.Warn("LLM provider not configured, tweet generation will be unavailable", logger.F("error", llmErr.Error()))
+	} else {
+		llmAdapter = llm.NewCompleteAdapter(llmProvider)
 	}
-	llmAdapter := llm.NewCompleteAdapter(llmProvider)
 
 	tweetRepo := repository.NewTweetRepository(app.DB)
 	promptRepo := repository.NewPromptTemplateRepository(app.DB)
