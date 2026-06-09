@@ -1,9 +1,10 @@
 # Story
 
-A CLI-first second brain for developers. Capture learning, work logs, resources, and engineering notes — transform them into structured knowledge and publish to your favorite platforms.
+A CLI-first second brain for developers. Capture raw thoughts, learning, work logs, resources, and engineering notes — transform them into structured knowledge and publish to your favorite platforms.
 
 ## Features
 
+- **Raw Capture** — Frictionless unstructured capture: type, pipe (`git diff | story raw`), or read from file. Content is stored as-is and processed into structured knowledge later
 - **Knowledge capture** — CLI commands to quickly log learning, work, resources, and engineering notes
 - **Full-text search** — Search across all entries, tags, and resources
 - **Resource management** — Track URLs, GitHub repos, articles, YouTube videos, PDFs, and markdown
@@ -76,6 +77,13 @@ Config is loaded from `configs/config.yaml` and overridden by `STORY_*` environm
 # Login
 ./story auth login --email you@example.com --password "secure-pass"
 
+# Quick raw capture (type notes, press Ctrl+D when done)
+./story raw
+
+# Pipe content directly
+git diff | story raw
+cat notes.txt | story raw --file notes.txt
+
 # Add your first entry
 ./story entry add --type learning --title "Go Interfaces" --tags go,patterns
 # (type/paste content, then Ctrl+D)
@@ -111,6 +119,15 @@ Config is loaded from `configs/config.yaml` and overridden by `STORY_*` environm
 | `story entry delete <id>` | Soft-delete an entry |
 | `story timeline` | Show recent entries |
 | `story search <query>` | Full-text search entries |
+
+### Raw Capture
+| Command | Description |
+|---------|-------------|
+| `story raw` | Interactive mode — type notes, press Ctrl+D to finish |
+| `story raw -f <path>` | Read content from a file |
+| `echo "note" \| story raw` | Pipe input from another command |
+| `story process raw <id>` | Process a raw entry into structured knowledge (future) |
+| `story process raw --all` | Process all unprocessed raw entries (future) |
 
 ### Resources
 | Command | Description |
@@ -154,12 +171,21 @@ The web dashboard provides a browser-based interface for managing tweets:
 story web --port 8080
 ```
 
+When the server starts, it prints a URL with a short-lived login code. The browser opens automatically:
+
+```
+Open this URL: http://localhost:8080/?code=Qp9D73
+```
+
+The code is exchanged for a JWT token automatically — no manual copy-pasting required.
+
 - **Tweet drafts page** — View and filter all tweets by status
 - **Tweet editor** — Edit content, see character count, regenerate, approve, archive
 - **Resource viewer** — View entry details and attached resources
 - **Copy button** — One-click copy tweet content to clipboard
+- **Auto-disconnect** — Page detects when the server shuts down and displays a "Server Disconnected" message
 
-The dashboard uses a REST API (`/api/*`) with JWT authentication and an embeddable static frontend for future React migration.
+The dashboard uses an embedded SPA with REST API (`/api/*`). The JWT is never exposed in URLs after initial exchange.
 
 ## Architecture
 
@@ -174,6 +200,7 @@ internal/
     collection/                — Collection management
     tag/                       — Tag management
     resource/                  — Resource tracking
+    raw_entry/                 — Raw unstructured capture
     publishing/                — Publishing pipeline
     content/                   — Tweet generation, lifecycle
   infrastructure/
@@ -197,6 +224,16 @@ migrations/                    — Goose SQL migrations
 - **Infrastructure** — Implements domain interfaces
 - **Interfaces** — CLI and API adapt to application services
 
+### Raw Capture Flow
+
+1. User runs `story raw` (interactive), `story raw -f <file>` (file), or pipes input (`git diff | story raw`)
+2. Content is stored as-is in the `raw_entries` table with status `raw`
+3. The original content is never modified — it is the source of truth
+4. Later, `story process raw` converts raw entries into structured data:
+   - Learning entries, work logs, resource references
+   - Topics, tags, project associations
+5. AI-generated content is always derived from raw data, never replacing it
+
 ### Content Generation Flow
 
 1. User runs `story tweet generate <entry-id>` or clicks "Generate" in web UI
@@ -212,6 +249,7 @@ migrations/                    — Goose SQL migrations
 
 PostgreSQL with migrations managed by goose. Key tables:
 - `users`, `sessions` — Auth
+- `raw_entries` — Unstructured raw capture (status: raw → processing → structured → archived)
 - `entries`, `entry_tags`, `entry_collections` — Knowledge base
 - `tags`, `collections` — Organization
 - `resources`, `entry_resources` — External resources
