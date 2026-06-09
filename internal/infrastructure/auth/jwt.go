@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/rand"
 	"fmt"
 	"time"
 
@@ -9,9 +10,6 @@ import (
 	"github.com/anomalyco/story/internal/infrastructure/config"
 )
 
-// JWTTokenService manages JWT access and refresh tokens.
-// Access tokens are short-lived (15min default) and use HMAC-SHA256 signing.
-// Refresh tokens are opaque random strings stored as Argon2 hashes.
 type JWTTokenService struct {
 	secret         []byte
 	accessTokenTTL time.Duration
@@ -27,17 +25,17 @@ func NewJWTTokenService(cfg config.AuthConfig) (*JWTTokenService, error) {
 	}, nil
 }
 
-// CustomClaims extends standard JWT claims with user identification.
 type CustomClaims struct {
-	UserID uuid.UUID `json:"user_id"`
+	UserID    uuid.UUID `json:"user_id"`
+	SessionID uuid.UUID `json:"session_id"`
 	jwt.RegisteredClaims
 }
 
-// GenerateAccessToken creates a signed JWT for the given user.
-func (s *JWTTokenService) GenerateAccessToken(userID uuid.UUID) (string, error) {
+func (s *JWTTokenService) GenerateAccessToken(userID, sessionID uuid.UUID) (string, int64, error) {
 	now := time.Now()
 	claims := CustomClaims{
-		UserID: userID,
+		UserID:    userID,
+		SessionID: sessionID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			Issuer:    "story",
 			Subject:   userID.String(),
@@ -49,24 +47,21 @@ func (s *JWTTokenService) GenerateAccessToken(userID uuid.UUID) (string, error) 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	signedToken, err := token.SignedString(s.secret)
 	if err != nil {
-		return "", fmt.Errorf("signing token: %w", err)
+		return "", 0, fmt.Errorf("signing token: %w", err)
 	}
 
-	return signedToken, nil
+	return signedToken, int64(s.accessTokenTTL.Seconds()), nil
 }
 
-// GenerateRefreshToken creates a cryptographically random refresh token.
-// The raw token should be returned to the client; only its hash is stored.
 func (s *JWTTokenService) GenerateRefreshToken() (string, error) {
-	b, err := generateRandomBytes(32)
-	if err != nil {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
 		return "", fmt.Errorf("generating refresh token: %w", err)
 	}
 	return fmt.Sprintf("%x", b), nil
 }
 
-// ValidateAccessToken parses and validates a JWT, returning the user ID.
-func (s *JWTTokenService) ValidateAccessToken(tokenString string) (uuid.UUID, error) {
+func (s *JWTTokenService) ValidateAccessToken(tokenString string) (uuid.UUID, uuid.UUID, error) {
 	token, err := jwt.ParseWithClaims(tokenString, &CustomClaims{}, func(token *jwt.Token) (interface{}, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -74,13 +69,13 @@ func (s *JWTTokenService) ValidateAccessToken(tokenString string) (uuid.UUID, er
 		return s.secret, nil
 	})
 	if err != nil {
-		return uuid.Nil, fmt.Errorf("parsing token: %w", err)
+		return uuid.Nil, uuid.Nil, fmt.Errorf("parsing token: %w", err)
 	}
 
 	claims, ok := token.Claims.(*CustomClaims)
 	if !ok || !token.Valid {
-		return uuid.Nil, fmt.Errorf("invalid token claims")
+		return uuid.Nil, uuid.Nil, fmt.Errorf("invalid token claims")
 	}
 
-	return claims.UserID, nil
+	return claims.UserID, claims.SessionID, nil
 }

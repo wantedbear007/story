@@ -2,6 +2,7 @@ package auth
 
 import (
 	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
 	"fmt"
@@ -109,6 +110,14 @@ func generateRandomBytes(n uint32) ([]byte, error) {
 		return nil, fmt.Errorf("reading random bytes: %w", err)
 	}
 	return b, nil
+}
+
+// HashToken creates a deterministic SHA-256 hash of an opaque token.
+// Unlike password hashing (which needs slow salted hashing), token hashing
+// must be deterministic so the stored hash can be used for lookup.
+func (ph *PasswordHasher) HashToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return fmt.Sprintf("%x", h[:])
 }
 
 // decodeHash parses an encoded Argon2id hash string into its components.

@@ -12,7 +12,6 @@ import (
 	"github.com/google/uuid"
 )
 
-// UserRepository implements domain.UserRepository using PostgreSQL via pgx.
 type UserRepository struct {
 	pool *pgxpool.Pool
 }
@@ -23,8 +22,8 @@ func NewUserRepository(pool *pgxpool.Pool) *UserRepository {
 
 func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 	query := `
-		INSERT INTO users (id, email, password_hash, display_name, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, $5, $6)
+		INSERT INTO users (id, email, password_hash, display_name, email_verified_at, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)
 	`
 	now := time.Now()
 	user.CreatedAt = now
@@ -32,7 +31,7 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 
 	_, err := r.pool.Exec(ctx, query,
 		user.ID, user.Email, user.PasswordHash, user.DisplayName,
-		user.CreatedAt, user.UpdatedAt,
+		user.EmailVerifiedAt, user.CreatedAt, user.UpdatedAt,
 	)
 	if err != nil {
 		if isUniqueViolation(err) {
@@ -45,7 +44,7 @@ func (r *UserRepository) Create(ctx context.Context, user *domain.User) error {
 
 func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, display_name, created_at, updated_at, deleted_at
+		SELECT id, email, password_hash, display_name, email_verified_at, created_at, updated_at, deleted_at
 		FROM users
 		WHERE id = $1 AND deleted_at IS NULL
 	`
@@ -54,7 +53,7 @@ func (r *UserRepository) GetByID(ctx context.Context, id uuid.UUID) (*domain.Use
 
 func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.User, error) {
 	query := `
-		SELECT id, email, password_hash, display_name, created_at, updated_at, deleted_at
+		SELECT id, email, password_hash, display_name, email_verified_at, created_at, updated_at, deleted_at
 		FROM users
 		WHERE email = $1 AND deleted_at IS NULL
 	`
@@ -64,13 +63,13 @@ func (r *UserRepository) GetByEmail(ctx context.Context, email string) (*domain.
 func (r *UserRepository) Update(ctx context.Context, user *domain.User) error {
 	query := `
 		UPDATE users
-		SET email = $1, password_hash = $2, display_name = $3, updated_at = $4
-		WHERE id = $5 AND deleted_at IS NULL
+		SET email = $1, password_hash = $2, display_name = $3, email_verified_at = $4, updated_at = $5
+		WHERE id = $6 AND deleted_at IS NULL
 	`
 	user.UpdatedAt = time.Now()
 
 	tag, err := r.pool.Exec(ctx, query,
-		user.Email, user.PasswordHash, user.DisplayName, user.UpdatedAt, user.ID,
+		user.Email, user.PasswordHash, user.DisplayName, user.EmailVerifiedAt, user.UpdatedAt, user.ID,
 	)
 	if err != nil {
 		return fmt.Errorf("updating user: %w", err)
@@ -99,7 +98,7 @@ func (r *UserRepository) scanUser(ctx context.Context, query string, args ...int
 	user := &domain.User{}
 	err := row.Scan(
 		&user.ID, &user.Email, &user.PasswordHash, &user.DisplayName,
-		&user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
+		&user.EmailVerifiedAt, &user.CreatedAt, &user.UpdatedAt, &user.DeletedAt,
 	)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
