@@ -2,60 +2,62 @@ package user
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"errors"
 	"fmt"
+	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/anomalyco/story/internal/domain"
-	"github.com/google/uuid"
+	apperrors "github.com/anomalyco/story/internal/pkg/errors"
 )
 
-// PasswordHasher abstracts password hashing so the service layer
-// never depends on a specific algorithm (Argon2, bcrypt, etc.).
+type EmailSender interface {
+	SendVerificationEmail(ctx context.Context, to, token, displayName string) error
+}
+
 type PasswordHasher interface {
 	Hash(password string) (string, error)
-	Verify(password, hash string) error
+	Verify(password, encodedHash string) error
+	HashToken(token string) string
 }
 
-// TokenService abstracts JWT token generation so the service layer
-// never depends on a specific JWT implementation.
-type TokenService interface {
-	GenerateAccessToken(userID uuid.UUID) (string, error)
-	GenerateRefreshToken() (string, error)
-	ValidateAccessToken(tokenString string) (uuid.UUID, error)
-}
-
-// Service implements user-related use cases.
-// It depends on interfaces, not concrete implementations (DIP).
 type Service struct {
-	userRepo    domain.UserRepository
+	userRepo   domain.UserRepository
+	emailRepo  domain.EmailVerificationRepository
 	sessionRepo domain.SessionRepository
-	hasher      PasswordHasher
-	tokens      TokenService
+	hasher     PasswordHasher
+	mailer     EmailSender
+	verifyTTL  time.Duration
 }
 
 func NewService(
 	userRepo domain.UserRepository,
+	emailRepo domain.EmailVerificationRepository,
 	sessionRepo domain.SessionRepository,
 	hasher PasswordHasher,
-	tokens TokenService,
+	mailer EmailSender,
+	verifyTTL time.Duration,
 ) *Service {
 	return &Service{
 		userRepo:    userRepo,
+		emailRepo:   emailRepo,
 		sessionRepo: sessionRepo,
 		hasher:      hasher,
-		tokens:      tokens,
+		mailer:      mailer,
+		verifyTTL:   verifyTTL,
 	}
 }
 
-func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthResponse, error) {
-	existing, err := s.userRepo.GetByEmail(ctx, req.Email)
-	if err != nil && err != domain.ErrNotFound {
-		return nil, fmt.Errorf("checking existing user: %w", err)
-	}
+func (s *Service) Register(ctx context.Context, req *RegisterRequest) (*RegisterResponse, error) {
+	existing, _ := s.userRepo.GetByEmail(ctx, req.Email)
 	if existing != nil {
-		return nil, fmt.Errorf("%w: email already registered", domain.ErrAlreadyExists)
+		return nil, apperrors.ErrConflict("email already registered")
 	}
 
-	hash, err := s.hasher.Hash(req.Password)
+	pwHash, err := s.hasher.Hash(req.Password)
 	if err != nil {
 		return nil, fmt.Errorf("hashing password: %w", err)
 	}
@@ -63,7 +65,7 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthRespo
 	user := &domain.User{
 		ID:           uuid.New(),
 		Email:        req.Email,
-		PasswordHash: hash,
+		PasswordHash: pwHash,
 		DisplayName:  req.DisplayName,
 	}
 
@@ -71,104 +73,141 @@ func (s *Service) Register(ctx context.Context, req RegisterRequest) (*AuthRespo
 		return nil, fmt.Errorf("creating user: %w", err)
 	}
 
-	accessToken, err := s.tokens.GenerateAccessToken(user.ID)
-	if err != nil {
-		return nil, fmt.Errorf("generating access token: %w", err)
+	tokenBytes := make([]byte, 32)
+	if _, err := rand.Read(tokenBytes); err != nil {
+		return nil, fmt.Errorf("generating verification token: %w", err)
 	}
+	rawToken := hex.EncodeToString(tokenBytes)
 
-	rawRefresh, err := s.tokens.GenerateRefreshToken()
-	if err != nil {
-		return nil, fmt.Errorf("generating refresh token: %w", err)
-	}
-
-	refreshHash, err := s.hasher.Hash(rawRefresh)
-	if err != nil {
-		return nil, fmt.Errorf("hashing refresh token: %w", err)
-	}
-
-	refreshToken := &domain.RefreshToken{
+	ev := &domain.EmailVerification{
 		ID:        uuid.New(),
 		UserID:    user.ID,
-		TokenHash: refreshHash,
+		Email:     user.Email,
+		TokenHash: s.hasher.HashToken(rawToken),
+		ExpiresAt: time.Now().Add(s.verifyTTL),
 	}
 
-	if err := s.sessionRepo.CreateRefreshToken(ctx, refreshToken); err != nil {
-		return nil, fmt.Errorf("storing refresh token: %w", err)
+	if err := s.emailRepo.Create(ctx, ev); err != nil {
+		return nil, fmt.Errorf("creating email verification: %w", err)
 	}
 
-	return &AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: rawRefresh,
-		User:         UserToResponse(user),
+	if err := s.mailer.SendVerificationEmail(ctx, user.Email, rawToken, user.DisplayName); err != nil {
+		_ = err
+	}
+
+	return &RegisterResponse{
+		UserID:      user.ID.String(),
+		Email:       user.Email,
+		DisplayName: user.DisplayName,
+		Message:     "registration successful. check email to verify your account.",
 	}, nil
 }
 
-func (s *Service) Login(ctx context.Context, req LoginRequest) (*AuthResponse, error) {
-	user, err := s.userRepo.GetByEmail(ctx, req.Email)
+func (s *Service) VerifyEmail(ctx context.Context, req *VerifyEmailRequest) error {
+	tokenHash := s.hasher.HashToken(req.Token)
+
+	ev, err := s.emailRepo.GetByTokenHash(ctx, tokenHash)
 	if err != nil {
-		return nil, fmt.Errorf("%w: invalid email or password", domain.ErrUnauthorized)
+		if errors.Is(err, domain.ErrNotFound) {
+			return apperrors.ErrInvalidInput("invalid or expired verification token")
+		}
+		return fmt.Errorf("fetching verification: %w", err)
 	}
 
-	if err := s.hasher.Verify(req.Password, user.PasswordHash); err != nil {
-		return nil, fmt.Errorf("%w: invalid email or password", domain.ErrUnauthorized)
+	if ev.IsVerified() {
+		return apperrors.ErrInvalidInput("email already verified")
 	}
 
-	accessToken, err := s.tokens.GenerateAccessToken(user.ID)
+	if ev.IsExpired() {
+		return apperrors.ErrInvalidInput("verification token has expired")
+	}
+
+	now := time.Now()
+	ev.VerifiedAt = &now
+
+	if err := s.emailRepo.MarkVerified(ctx, ev.ID); err != nil {
+		return fmt.Errorf("marking verified: %w", err)
+	}
+
+	user, err := s.userRepo.GetByID(ctx, ev.UserID)
 	if err != nil {
-		return nil, fmt.Errorf("generating access token: %w", err)
+		return fmt.Errorf("fetching user: %w", err)
 	}
 
-	rawRefresh, err := s.tokens.GenerateRefreshToken()
-	if err != nil {
-		return nil, fmt.Errorf("generating refresh token: %w", err)
+	user.EmailVerifiedAt = &now
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return fmt.Errorf("updating user: %w", err)
 	}
 
-	refreshHash, err := s.hasher.Hash(rawRefresh)
-	if err != nil {
-		return nil, fmt.Errorf("hashing refresh token: %w", err)
-	}
-
-	refreshToken := &domain.RefreshToken{
-		ID:        uuid.New(),
-		UserID:    user.ID,
-		TokenHash: refreshHash,
-	}
-
-	if err := s.sessionRepo.CreateRefreshToken(ctx, refreshToken); err != nil {
-		return nil, fmt.Errorf("storing refresh token: %w", err)
-	}
-
-	return &AuthResponse{
-		AccessToken:  accessToken,
-		RefreshToken: rawRefresh,
-		User:         UserToResponse(user),
-	}, nil
+	return nil
 }
 
 func (s *Service) GetProfile(ctx context.Context, userID uuid.UUID) (*UserResponse, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: user not found", domain.ErrNotFound)
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, apperrors.ErrNotFound("user not found")
+		}
+		return nil, fmt.Errorf("fetching user: %w", err)
 	}
 
-	resp := UserToResponse(user)
-	return &resp, nil
+	return &UserResponse{
+		ID:              user.ID.String(),
+		Email:           user.Email,
+		DisplayName:     user.DisplayName,
+		EmailVerifiedAt: user.EmailVerifiedAt,
+		CreatedAt:       user.CreatedAt,
+		UpdatedAt:       user.UpdatedAt,
+	}, nil
 }
 
-func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, req UpdateProfileRequest) (*UserResponse, error) {
+func (s *Service) UpdateProfile(ctx context.Context, userID uuid.UUID, req *UpdateProfileRequest) (*UserResponse, error) {
 	user, err := s.userRepo.GetByID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("%w: user not found", domain.ErrNotFound)
+		if errors.Is(err, domain.ErrNotFound) {
+			return nil, apperrors.ErrNotFound("user not found")
+		}
+		return nil, fmt.Errorf("fetching user: %w", err)
 	}
 
-	if req.DisplayName != "" {
-		user.DisplayName = req.DisplayName
-	}
+	user.DisplayName = req.DisplayName
 
 	if err := s.userRepo.Update(ctx, user); err != nil {
 		return nil, fmt.Errorf("updating user: %w", err)
 	}
 
-	resp := UserToResponse(user)
-	return &resp, nil
+	return &UserResponse{
+		ID:              user.ID.String(),
+		Email:           user.Email,
+		DisplayName:     user.DisplayName,
+		EmailVerifiedAt: user.EmailVerifiedAt,
+		CreatedAt:       user.CreatedAt,
+		UpdatedAt:       user.UpdatedAt,
+	}, nil
+}
+
+func (s *Service) ChangePassword(ctx context.Context, userID uuid.UUID, req *ChangePasswordRequest) error {
+	user, err := s.userRepo.GetByID(ctx, userID)
+	if err != nil {
+		if errors.Is(err, domain.ErrNotFound) {
+			return apperrors.ErrNotFound("user not found")
+		}
+		return fmt.Errorf("fetching user: %w", err)
+	}
+
+	if err := s.hasher.Verify(req.CurrentPassword, user.PasswordHash); err != nil {
+		return apperrors.ErrInvalidInput("current password is incorrect")
+	}
+
+	newHash, err := s.hasher.Hash(req.NewPassword)
+	if err != nil {
+		return fmt.Errorf("hashing new password: %w", err)
+	}
+
+	user.PasswordHash = newHash
+	if err := s.userRepo.Update(ctx, user); err != nil {
+		return fmt.Errorf("updating password: %w", err)
+	}
+
+	return nil
 }

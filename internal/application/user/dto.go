@@ -1,45 +1,38 @@
 package user
 
-import (
-	"time"
-
-	"github.com/anomalyco/story/internal/domain"
-	"github.com/google/uuid"
-)
+import "time"
 
 type RegisterRequest struct {
-	Email       string `json:"email" validate:"required,email"`
-	Password    string `json:"password" validate:"required,min=8,max=128"`
-	DisplayName string `json:"display_name" validate:"required,min=1,max=100"`
+	Email       string `json:"email"`
+	Password    string `json:"password"`
+	DisplayName string `json:"display_name"`
 }
 
-type LoginRequest struct {
-	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+type RegisterResponse struct {
+	UserID      string `json:"user_id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	Message     string `json:"message"`
+}
+
+type VerifyEmailRequest struct {
+	Token string `json:"token"`
+}
+
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
 }
 
 type UpdateProfileRequest struct {
-	DisplayName string `json:"display_name" validate:"omitempty,min=1,max=100"`
+	DisplayName string `json:"display_name"`
 }
 
 type UserResponse struct {
-	ID          uuid.UUID `json:"id"`
-	Email       string    `json:"email"`
-	DisplayName string    `json:"display_name"`
-	CreatedAt   time.Time `json:"created_at"`
-}
-
-type AuthResponse struct {
-	AccessToken  string       `json:"access_token"`
-	RefreshToken string       `json:"refresh_token"`
-	User         UserResponse `json:"user"`
-}
-
-func UserToResponse(u *domain.User) UserResponse {
-	return UserResponse{
-		ID:          u.ID,
-		Email:       u.Email,
-		DisplayName: u.DisplayName,
-		CreatedAt:   u.CreatedAt,
-	}
+	ID              string     `json:"id"`
+	Email           string     `json:"email"`
+	DisplayName     string     `json:"display_name"`
+	EmailVerifiedAt *time.Time `json:"email_verified_at,omitempty"`
+	CreatedAt       time.Time  `json:"created_at"`
+	UpdatedAt       time.Time  `json:"updated_at"`
 }

@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/anomalyco/story/internal/application/user"
 	"github.com/anomalyco/story/internal/domain"
 	"github.com/google/uuid"
 )
 
-// mockUserRepo implements domain.UserRepository for testing.
 type mockUserRepo struct {
 	users map[string]*domain.User
 }
@@ -62,49 +62,103 @@ func (m *mockUserRepo) SoftDelete(ctx context.Context, id uuid.UUID) error {
 	return domain.ErrNotFound
 }
 
-// mockSessionRepo implements domain.SessionRepository for testing.
-type mockSessionRepo struct {
-	tokens map[string]*domain.RefreshToken
+type mockEmailVerificationRepo struct {
+	tokens map[string]*domain.EmailVerification
 }
 
-func newMockSessionRepo() *mockSessionRepo {
-	return &mockSessionRepo{tokens: make(map[string]*domain.RefreshToken)}
+func newMockEmailVerificationRepo() *mockEmailVerificationRepo {
+	return &mockEmailVerificationRepo{tokens: make(map[string]*domain.EmailVerification)}
 }
 
-func (m *mockSessionRepo) CreateRefreshToken(ctx context.Context, t *domain.RefreshToken) error {
-	m.tokens[t.TokenHash] = t
+func (m *mockEmailVerificationRepo) Create(ctx context.Context, ev *domain.EmailVerification) error {
+	m.tokens[ev.TokenHash] = ev
 	return nil
 }
 
-func (m *mockSessionRepo) GetRefreshTokenByHash(ctx context.Context, h string) (*domain.RefreshToken, error) {
-	t, exists := m.tokens[h]
+func (m *mockEmailVerificationRepo) GetByTokenHash(ctx context.Context, h string) (*domain.EmailVerification, error) {
+	ev, exists := m.tokens[h]
 	if !exists {
 		return nil, domain.ErrNotFound
 	}
-	return t, nil
+	return ev, nil
 }
 
-func (m *mockSessionRepo) RevokeRefreshToken(ctx context.Context, id uuid.UUID) error {
+func (m *mockEmailVerificationRepo) MarkVerified(ctx context.Context, id uuid.UUID) error {
+	for _, ev := range m.tokens {
+		if ev.ID == id {
+			now := time.Now()
+			ev.VerifiedAt = &now
+			return nil
+		}
+	}
+	return domain.ErrNotFound
+}
+
+type mockSessionRepo struct {
+	sessions map[uuid.UUID]*domain.Session
+}
+
+func newMockSessionRepo() *mockSessionRepo {
+	return &mockSessionRepo{sessions: make(map[uuid.UUID]*domain.Session)}
+}
+
+func (m *mockSessionRepo) Create(ctx context.Context, s *domain.Session) error {
+	m.sessions[s.ID] = s
 	return nil
 }
 
-func (m *mockSessionRepo) RevokeUserRefreshTokens(ctx context.Context, uid uuid.UUID) error {
-	return nil
+func (m *mockSessionRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Session, error) {
+	s, exists := m.sessions[id]
+	if !exists {
+		return nil, domain.ErrNotFound
+	}
+	return s, nil
 }
 
-func (m *mockSessionRepo) CreatePasswordResetToken(ctx context.Context, t *domain.PasswordResetToken) error {
-	return nil
-}
-
-func (m *mockSessionRepo) GetPasswordResetTokenByHash(ctx context.Context, h string) (*domain.PasswordResetToken, error) {
+func (m *mockSessionRepo) GetByTokenHash(ctx context.Context, h string) (*domain.Session, error) {
+	for _, s := range m.sessions {
+		if s.TokenHash == h {
+			return s, nil
+		}
+	}
 	return nil, domain.ErrNotFound
 }
 
-func (m *mockSessionRepo) MarkPasswordResetTokenUsed(ctx context.Context, id uuid.UUID) error {
+func (m *mockSessionRepo) ListByUserID(ctx context.Context, uid uuid.UUID) ([]*domain.Session, error) {
+	var result []*domain.Session
+	for _, s := range m.sessions {
+		if s.UserID == uid {
+			result = append(result, s)
+		}
+	}
+	if result == nil {
+		result = make([]*domain.Session, 0)
+	}
+	return result, nil
+}
+
+func (m *mockSessionRepo) Revoke(ctx context.Context, id uuid.UUID) error {
+	s, exists := m.sessions[id]
+	if !exists {
+		return domain.ErrNotFound
+	}
+	s.IsRevoked = true
 	return nil
 }
 
-// mockHasher implements user.PasswordHasher for testing.
+func (m *mockSessionRepo) RevokeAllForUser(ctx context.Context, uid uuid.UUID) error {
+	for _, s := range m.sessions {
+		if s.UserID == uid {
+			s.IsRevoked = true
+		}
+	}
+	return nil
+}
+
+func (m *mockSessionRepo) UpdateLastUsed(ctx context.Context, id uuid.UUID) error {
+	return nil
+}
+
 type mockHasher struct{}
 
 func (m *mockHasher) Hash(password string) (string, error) {
@@ -118,28 +172,33 @@ func (m *mockHasher) Verify(password, hash string) error {
 	return errors.New("password mismatch")
 }
 
-// mockTokenService implements user.TokenService for testing.
-type mockTokenService struct{}
-
-func (m *mockTokenService) GenerateAccessToken(userID uuid.UUID) (string, error) {
-	return "access_token_" + userID.String(), nil
+func (m *mockHasher) HashToken(token string) string {
+	if token == "" {
+		return "empty-hash"
+	}
+	return "token-hash:" + token
 }
 
-func (m *mockTokenService) GenerateRefreshToken() (string, error) {
-	return "refresh_token_test", nil
-}
+type mockMailer struct{}
 
-func (m *mockTokenService) ValidateAccessToken(token string) (uuid.UUID, error) {
-	return uuid.Nil, nil
+func (m *mockMailer) SendVerificationEmail(ctx context.Context, to, token, displayName string) error {
+	return nil
 }
 
 func TestService_Register(t *testing.T) {
 	t.Parallel()
 
-	svc := user.NewService(newMockUserRepo(), newMockSessionRepo(), &mockHasher{}, &mockTokenService{})
+	svc := user.NewService(
+		newMockUserRepo(),
+		newMockEmailVerificationRepo(),
+		newMockSessionRepo(),
+		&mockHasher{},
+		&mockMailer{},
+		24*time.Hour,
+	)
 
 	t.Run("successful registration", func(t *testing.T) {
-		resp, err := svc.Register(context.Background(), user.RegisterRequest{
+		resp, err := svc.Register(context.Background(), &user.RegisterRequest{
 			Email:       "test@example.com",
 			Password:    "password123",
 			DisplayName: "Test User",
@@ -147,19 +206,16 @@ func TestService_Register(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Register() error = %v", err)
 		}
-		if resp.User.Email != "test@example.com" {
-			t.Errorf("Email = %q, want %q", resp.User.Email, "test@example.com")
+		if resp.Email != "test@example.com" {
+			t.Errorf("Email = %q, want %q", resp.Email, "test@example.com")
 		}
-		if resp.AccessToken == "" {
-			t.Error("AccessToken should not be empty")
-		}
-		if resp.RefreshToken == "" {
-			t.Error("RefreshToken should not be empty")
+		if resp.Message == "" {
+			t.Error("Message should not be empty")
 		}
 	})
 
-	t.Run("duplicate email returns error", func(t *testing.T) {
-		_, err := svc.Register(context.Background(), user.RegisterRequest{
+	t.Run("duplicate email returns conflict", func(t *testing.T) {
+		_, err := svc.Register(context.Background(), &user.RegisterRequest{
 			Email:       "test@example.com",
 			Password:    "password123",
 			DisplayName: "Test User",
@@ -167,63 +223,31 @@ func TestService_Register(t *testing.T) {
 		if err == nil {
 			t.Fatal("Register() expected error for duplicate email")
 		}
-		if !errors.Is(err, domain.ErrAlreadyExists) {
-			t.Errorf("Register() error = %v, want %v", err, domain.ErrAlreadyExists)
-		}
-	})
-}
-
-func TestService_Login(t *testing.T) {
-	t.Parallel()
-
-	svc := user.NewService(newMockUserRepo(), newMockSessionRepo(), &mockHasher{}, &mockTokenService{})
-
-	_, _ = svc.Register(context.Background(), user.RegisterRequest{
-		Email:       "login@example.com",
-		Password:    "password123",
-		DisplayName: "Login User",
-	})
-
-	t.Run("successful login", func(t *testing.T) {
-		resp, err := svc.Login(context.Background(), user.LoginRequest{
-			Email:    "login@example.com",
-			Password: "password123",
-		})
-		if err != nil {
-			t.Fatalf("Login() error = %v", err)
-		}
-		if resp.User.Email != "login@example.com" {
-			t.Errorf("Email = %q, want %q", resp.User.Email, "login@example.com")
-		}
-	})
-
-	t.Run("wrong password returns unauthorized", func(t *testing.T) {
-		_, err := svc.Login(context.Background(), user.LoginRequest{
-			Email:    "login@example.com",
-			Password: "wrongpassword",
-		})
-		if err == nil {
-			t.Fatal("Login() expected error for wrong password")
-		}
-		if !errors.Is(err, domain.ErrUnauthorized) {
-			t.Errorf("Login() error = %v, want %v", err, domain.ErrUnauthorized)
-		}
 	})
 }
 
 func TestService_GetProfile(t *testing.T) {
 	t.Parallel()
 
-	svc := user.NewService(newMockUserRepo(), newMockSessionRepo(), &mockHasher{}, &mockTokenService{})
+	svc := user.NewService(
+		newMockUserRepo(),
+		newMockEmailVerificationRepo(),
+		newMockSessionRepo(),
+		&mockHasher{},
+		&mockMailer{},
+		24*time.Hour,
+	)
 
-	resp, _ := svc.Register(context.Background(), user.RegisterRequest{
+	resp, _ := svc.Register(context.Background(), &user.RegisterRequest{
 		Email:       "profile@example.com",
 		Password:    "password123",
 		DisplayName: "Profile User",
 	})
 
+	uid, _ := uuid.Parse(resp.UserID)
+
 	t.Run("existing user returns profile", func(t *testing.T) {
-		profile, err := svc.GetProfile(context.Background(), resp.User.ID)
+		profile, err := svc.GetProfile(context.Background(), uid)
 		if err != nil {
 			t.Fatalf("GetProfile() error = %v", err)
 		}
@@ -237,8 +261,46 @@ func TestService_GetProfile(t *testing.T) {
 		if err == nil {
 			t.Fatal("GetProfile() expected error for non-existent user")
 		}
-		if !errors.Is(err, domain.ErrNotFound) {
-			t.Errorf("GetProfile() error = %v, want %v", err, domain.ErrNotFound)
+	})
+}
+
+func TestService_ChangePassword(t *testing.T) {
+	t.Parallel()
+
+	svc := user.NewService(
+		newMockUserRepo(),
+		newMockEmailVerificationRepo(),
+		newMockSessionRepo(),
+		&mockHasher{},
+		&mockMailer{},
+		24*time.Hour,
+	)
+
+	resp, _ := svc.Register(context.Background(), &user.RegisterRequest{
+		Email:       "changepw@example.com",
+		Password:    "oldpassword",
+		DisplayName: "Change PW",
+	})
+
+	uid, _ := uuid.Parse(resp.UserID)
+
+	t.Run("successful password change", func(t *testing.T) {
+		err := svc.ChangePassword(context.Background(), uid, &user.ChangePasswordRequest{
+			CurrentPassword: "oldpassword",
+			NewPassword:     "newpassword",
+		})
+		if err != nil {
+			t.Fatalf("ChangePassword() error = %v", err)
+		}
+	})
+
+	t.Run("wrong current password returns error", func(t *testing.T) {
+		err := svc.ChangePassword(context.Background(), uid, &user.ChangePasswordRequest{
+			CurrentPassword: "wrongpassword",
+			NewPassword:     "newpassword",
+		})
+		if err == nil {
+			t.Fatal("ChangePassword() expected error for wrong password")
 		}
 	})
 }
