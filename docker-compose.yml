@@ -1,0 +1,41 @@
+version: "3.9"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: story
+      POSTGRES_USER: story
+      POSTGRES_PASSWORD: ${STORY_DATABASE_PASSWORD:-changeme}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U story"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  story:
+    build: .
+    environment:
+      STORY_CONFIG_PATH: /etc/story/configs/config.yaml
+      STORY_DATABASE_PASSWORD: ${STORY_DATABASE_PASSWORD:-changeme}
+      STORY_AUTH_JWT_SECRET: ${STORY_AUTH_JWT_SECRET:-development-jwt-secret-not-for-production}
+      STORY_DATABASE_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      - story_data:/home/story
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  postgres_data:
+  story_data:

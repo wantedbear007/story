@@ -1,0 +1,39 @@
+app:
+  name: story
+  environment: development
+  log_level: debug
+
+server:
+  host: 0.0.0.0
+  port: 8080
+
+database:
+  host: localhost
+  port: 5432
+  name: story
+  user: story
+  ssl_mode: disable
+  max_open_conns: 25
+  max_idle_conns: 5
+
+auth:
+  access_token_ttl: 15m
+  refresh_token_ttl: 720h
+  password_reset_ttl: 1h
+
+llm:
+  provider: ollama
+  ollama:
+    base_url: http://localhost:11434
+    model: llama2
+  openai:
+    model: gpt-4
+  gemini:
+    model: gemini-pro
+  anthropic:
+    model: claude-3-opus-20240229
+
+smtp:
+  host: localhost
+  port: 1025
+  from: story@example.com
