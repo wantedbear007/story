@@ -1,9 +1,11 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/spf13/cobra"
@@ -31,6 +33,7 @@ func main() {
 
 	isHelp := len(args) == 0 || args[0] == "help" || args[0] == "--help"
 	isOnboarding := len(args) > 0 && (args[0] == "init" || args[0] == "verify" || args[0] == "setup")
+	isOffline := len(args) > 0 && (args[0] == "logout" || args[0] == "reset")
 
 	if isHelp {
 		if hasConfigFile() {
@@ -43,6 +46,11 @@ func main() {
 
 	if isOnboarding {
 		runOnboarding(args)
+		return
+	}
+
+	if isOffline {
+		runOffline(args)
 		return
 	}
 
@@ -165,6 +173,14 @@ func showFullHelp(args []string) {
 		Short: "Login to your account",
 	})
 	root.AddCommand(&cobra.Command{
+		Use:   "logout",
+		Short: "Logout and revoke the current session",
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "reset",
+		Short: "Reset all local config and session data",
+	})
+	root.AddCommand(&cobra.Command{
 		Use:   "password",
 		Short: "Manage your password",
 	})
@@ -184,7 +200,10 @@ func showFullHelp(args []string) {
 }
 
 func showOnboardingHelp() {
-	if err := newOnboardingRoot().Execute(); err != nil {
+	root := newOnboardingRoot()
+	root.AddCommand(&cobra.Command{Use: "logout", Short: "Logout and revoke the current session"})
+	root.AddCommand(&cobra.Command{Use: "reset", Short: "Reset all local config and session data"})
+	if err := root.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
 	}
@@ -219,6 +238,117 @@ func runOnboarding(args []string) {
 		}
 		os.Exit(1)
 	}
+}
+
+func runOffline(args []string) {
+	root := newOnboardingRoot()
+	root.AddCommand(&cobra.Command{
+		Use:   "logout",
+		Short: "Logout and revoke the current session",
+		RunE: func(_ *cobra.Command, _ []string) error {
+			cleared := clearLocalSession()
+			if cleared {
+				fmt.Println("Logged out")
+			}
+			return nil
+		},
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "reset",
+		Short: "Reset all local config and session data",
+		Long: `Remove all local configuration and session files from ~/.story/.
+
+This deletes:
+  - ~/.story/config.yaml   (configuration)
+  - ~/.story/session.json   (login session)
+
+Your database and remote data are NOT affected by this command.`,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return runResetOffline()
+		},
+	})
+	root.SetArgs(args)
+	if err := root.Execute(); err != nil {
+		if err.Error() != "" {
+			fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		}
+		os.Exit(1)
+	}
+}
+
+func clearLocalSession() bool {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error getting home directory: %v\n", err)
+		return false
+	}
+	sessionPath := home + "/.story/session.json"
+	if err := os.Remove(sessionPath); err != nil {
+		if os.IsNotExist(err) {
+			fmt.Println("Not logged in")
+			return false
+		}
+		fmt.Fprintf(os.Stderr, "Error removing session file: %v\n", err)
+		return false
+	}
+	return true
+}
+
+func runResetOffline() error {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return fmt.Errorf("getting home directory: %w", err)
+	}
+	storyDir := home + "/.story"
+
+	if _, err := os.Stat(storyDir); os.IsNotExist(err) {
+		fmt.Println("Nothing to reset — ~/.story/ does not exist")
+		return nil
+	}
+
+	fmt.Print("This will delete all config and session data. Type 'yes' to confirm: ")
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return fmt.Errorf("reading input: %w", err)
+	}
+	input = strings.TrimSpace(strings.ToLower(input))
+
+	if input != "yes" {
+		fmt.Println("Reset cancelled")
+		return nil
+	}
+
+	removed := false
+
+	configPath := home + "/.story/config.yaml"
+	if _, err := os.Stat(configPath); err == nil {
+		if err := os.Remove(configPath); err != nil {
+			return fmt.Errorf("removing config: %w", err)
+		}
+		fmt.Printf("Removed %s\n", configPath)
+		removed = true
+	}
+
+	sessionPath := home + "/.story/session.json"
+	if _, err := os.Stat(sessionPath); err == nil {
+		if err := os.Remove(sessionPath); err != nil {
+			return fmt.Errorf("removing session: %w", err)
+		}
+		fmt.Printf("Removed %s\n", sessionPath)
+		removed = true
+	}
+
+	if removed {
+		if entries, _ := os.ReadDir(storyDir); len(entries) == 0 {
+			os.Remove(storyDir)
+		}
+		fmt.Println("Reset complete")
+	} else {
+		fmt.Println("Nothing to reset")
+	}
+
+	return nil
 }
 
 func start(ctx context.Context, app *bootstrap.Application) error {

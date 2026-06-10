@@ -73,12 +73,14 @@ Founder: https://github.com/wantedbear007`,
 
 	topLevelRegister(deps, root)
 	topLevelLogin(deps, root)
+	topLevelLogout(deps, root)
 	topLevelPassword(deps, root)
 	topLevelForgotPassword(deps, root)
 	topLevelWhoami(deps, root)
 
 	root.AddCommand(newRawCommand(deps))
 	root.AddCommand(newProcessCommand(deps))
+	root.AddCommand(newResetCommand(deps))
 
 	return root
 }
@@ -120,6 +122,30 @@ func topLevelLogin(deps *Dependencies, root *cobra.Command) {
 	loginCmd.Flags().BoolVar(&revokeAll, "revoke-all", false, "Revoke all sessions except current")
 
 	root.AddCommand(loginCmd)
+}
+
+func topLevelLogout(deps *Dependencies, root *cobra.Command) {
+	root.AddCommand(&cobra.Command{
+		Use:   "logout",
+		Short: "Logout and revoke the current session",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			sessionID, err := resolveCurrentSessionID(deps)
+			if err != nil {
+				// No local session to revoke — still try to clean up
+				if err := clearSession(); err != nil {
+					return fmt.Errorf("clearing session: %w", err)
+				}
+				fmt.Println("Not logged in")
+				return nil
+			}
+			_ = deps.AuthService.Logout(cmd.Context(), sessionID)
+			if err := clearSession(); err != nil {
+				return fmt.Errorf("clearing session: %w", err)
+			}
+			fmt.Println("Logged out")
+			return nil
+		},
+	})
 }
 
 func topLevelPassword(deps *Dependencies, root *cobra.Command) {
