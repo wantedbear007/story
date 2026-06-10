@@ -85,6 +85,7 @@ Config is loaded from `configs/config.yaml`, `~/.story/config.yaml`, or `$STORY_
 | `STORY_APP_ENVIRONMENT` | development, staging, or production |
 | `STORY_DATABASE_HOST` | Database host |
 | `STORY_DATABASE_PORT` | Database port |
+| `STORY_DATABASE_SSLMODE` | SSL mode (disable/require/verify-full) |
 | `STORY_DATABASE_NAME` | Database name |
 | `STORY_DATABASE_USER` | Database user |
 | `STORY_SERVER_HOST` | Web dashboard host |

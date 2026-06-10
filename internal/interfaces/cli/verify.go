@@ -120,6 +120,9 @@ func loadInitConfig(path string) (*config.Config, error) {
 	if v := os.Getenv("STORY_DATABASE_USER"); v != "" {
 		cfg.Database.User = v
 	}
+	if v := os.Getenv("STORY_DATABASE_SSLMODE"); v != "" {
+		cfg.Database.SSLMode = v
+	}
 
 	return cfg, nil
 }

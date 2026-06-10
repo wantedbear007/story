@@ -206,6 +206,9 @@ func applyEnvOverrides(cfg *Config) {
 	if v := os.Getenv("STORY_DATABASE_USER"); v != "" {
 		cfg.Database.User = v
 	}
+	if v := os.Getenv("STORY_DATABASE_SSLMODE"); v != "" {
+		cfg.Database.SSLMode = v
+	}
 	if v := os.Getenv("STORY_SERVER_HOST"); v != "" {
 		cfg.Server.Host = v
 	}

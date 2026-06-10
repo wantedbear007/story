@@ -114,7 +114,15 @@ func runInit() error {
 	cfg.Database.Name = promptDefault("Database name", "story", nil)
 	cfg.Database.User = promptDefault("Database username", "story", nil)
 	cfg.Database.Password = promptRequired("Database password")
-	cfg.Database.SSLMode = "disable"
+	cfg.Database.SSLMode = promptDefault("SSL mode (disable/require/verify-full)", "disable",
+		func(v string) string {
+			switch v {
+			case "disable", "allow", "prefer", "require", "verify-ca", "verify-full":
+				return v
+			default:
+				return ""
+			}
+		})
 	cfg.Database.MaxOpenConns = 25
 	cfg.Database.MaxIdleConns = 5
 
