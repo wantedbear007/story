@@ -30,11 +30,15 @@ func (s *Service) Start(ctx context.Context) {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
 
+	healthyCh := s.tweetSvc.HealthyChan()
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			s.processPending(ctx)
+		case <-healthyCh:
 			s.processPending(ctx)
 		}
 	}

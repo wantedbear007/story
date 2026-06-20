@@ -49,6 +49,7 @@ type Service struct {
 	mu             sync.Mutex
 	lastHealthy    bool
 	lastCheckTime  time.Time
+	onHealthy      chan struct{}
 }
 
 func NewService(
@@ -62,11 +63,16 @@ func NewService(
 		promptRepo: promptRepo,
 		entryRepo:  entryRepo,
 		provider:   provider,
+		onHealthy:  make(chan struct{}, 1),
 	}
 }
 
 func (s *Service) IsLLMConfigured() bool {
 	return s.provider != nil
+}
+
+func (s *Service) HealthyChan() <-chan struct{} {
+	return s.onHealthy
 }
 
 func (s *Service) IsHealthy(ctx context.Context) bool {
@@ -82,15 +88,21 @@ func (s *Service) IsHealthy(ctx context.Context) bool {
 	}
 	s.mu.Unlock()
 
-	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	probeCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	_, err := s.provider.Complete(probeCtx, "ok", 1)
+	_, err := s.provider.Complete(probeCtx, "Say 'Hello from Story!' in one short sentence.", 50)
 
 	s.mu.Lock()
-	s.lastHealthy = err == nil
+	ok := err == nil
+	if ok && !s.lastHealthy {
+		select {
+		case s.onHealthy <- struct{}{}:
+		default:
+		}
+	}
+	s.lastHealthy = ok
 	s.lastCheckTime = time.Now()
-	ok := s.lastHealthy
 	s.mu.Unlock()
 	return ok
 }
