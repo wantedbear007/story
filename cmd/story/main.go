@@ -7,25 +7,32 @@ import (
 	"os"
 	"strings"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/spf13/cobra"
 	appauth "github.com/anomalyco/story/internal/application/auth"
 	"github.com/anomalyco/story/internal/application/collection"
 	"github.com/anomalyco/story/internal/application/content"
+	appdaemon "github.com/anomalyco/story/internal/application/daemon"
 	"github.com/anomalyco/story/internal/application/entry"
+	appnotif "github.com/anomalyco/story/internal/application/notification"
+	"github.com/anomalyco/story/internal/application/processor"
 	"github.com/anomalyco/story/internal/application/publishing"
 	"github.com/anomalyco/story/internal/application/raw_entry"
 	"github.com/anomalyco/story/internal/application/resource"
+	appsched "github.com/anomalyco/story/internal/application/scheduler"
 	"github.com/anomalyco/story/internal/application/tag"
 	appuser "github.com/anomalyco/story/internal/application/user"
 	infraauth "github.com/anomalyco/story/internal/infrastructure/auth"
 	"github.com/anomalyco/story/internal/infrastructure/bootstrap"
+	"github.com/anomalyco/story/internal/infrastructure/config"
+	infradaemon "github.com/anomalyco/story/internal/infrastructure/daemon"
 	"github.com/anomalyco/story/internal/infrastructure/email"
 	"github.com/anomalyco/story/internal/infrastructure/llm"
+	infranotif "github.com/anomalyco/story/internal/infrastructure/notification"
 	"github.com/anomalyco/story/internal/infrastructure/repository"
 	"github.com/anomalyco/story/internal/interfaces/api"
 	"github.com/anomalyco/story/internal/interfaces/cli"
 	"github.com/anomalyco/story/internal/pkg/logger"
+	"github.com/jackc/pgx/v5"
+	"github.com/spf13/cobra"
 )
 
 func main() {
@@ -34,6 +41,8 @@ func main() {
 	isHelp := len(args) == 0 || args[0] == "help" || args[0] == "--help"
 	isOnboarding := len(args) > 0 && (args[0] == "init" || args[0] == "verify" || args[0] == "setup")
 	isOffline := len(args) > 0 && (args[0] == "logout" || args[0] == "reset")
+	isDaemonCmd := len(args) > 0 && (args[0] == "start" || args[0] == "stop" || args[0] == "restart" || args[0] == "status" || args[0] == "test-noti")
+	isDaemonRun := len(args) > 0 && args[0] == "_daemon"
 
 	if isHelp {
 		if hasConfigFile() {
@@ -58,6 +67,18 @@ func main() {
 		fmt.Fprintln(os.Stderr, "Story is not configured.")
 		fmt.Fprintln(os.Stderr, "Run 'story init' to create your configuration.")
 		os.Exit(1)
+	}
+
+	if isDaemonRun {
+		if err := bootstrap.Run(context.Background(), bootstrapConfigPath(), runDaemon); err != nil {
+			os.Exit(1)
+		}
+		return
+	}
+
+	if isDaemonCmd {
+		runDaemonCommand(context.Background(), args)
+		return
 	}
 
 	if err := bootstrap.Run(context.Background(), bootstrapConfigPath(), start); err != nil {
@@ -192,6 +213,26 @@ func showFullHelp(args []string) {
 		Use:   "whoami",
 		Short: "Show current logged-in user",
 	})
+	root.AddCommand(&cobra.Command{
+		Use:   "start",
+		Short: "Start the background daemon",
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "stop",
+		Short: "Stop the background daemon",
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "restart",
+		Short: "Restart the background daemon",
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "status",
+		Short: "Show daemon status",
+	})
+	root.AddCommand(&cobra.Command{
+		Use:   "test-noti",
+		Short: "Send a test desktop notification",
+	})
 
 	if err := root.Execute(); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
@@ -211,8 +252,8 @@ func showOnboardingHelp() {
 
 func newOnboardingRoot() *cobra.Command {
 	root := &cobra.Command{
-		Use:           "story",
-		Short:         "A CLI-first second brain for developers",
+		Use:   "story",
+		Short: "A CLI-first second brain for developers",
 		Long: `Story captures learning, work logs, resources, and engineering notes,
 transforms them into structured knowledge, and publishes to your favorite platforms.
 
@@ -351,9 +392,127 @@ func runResetOffline() error {
 	return nil
 }
 
-func start(ctx context.Context, app *bootstrap.Application) error {
-	log := app.Logger.With(logger.F("component", "main"))
+func runDaemonCommand(ctx context.Context, args []string) {
+	cfg, err := config.Load(bootstrapConfigPath())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error loading config: %v\n", err)
+		os.Exit(1)
+	}
 
+	notifProvider, err := infranotif.NewProvider(cfg.Notify)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: %v\n", err)
+	}
+	var notifSvc *appnotif.Service
+	if notifProvider != nil {
+		notifSvc = appnotif.NewService(notifProvider)
+	}
+
+	captureURL := fmt.Sprintf("http://%s:%d/capture.html", cfg.Capture.Host, cfg.Capture.Port)
+
+	schedCfg := appsched.Config{
+		Enabled:    cfg.Scheduler.Enabled,
+		Hour:       cfg.Scheduler.Hour,
+		Minute:     cfg.Scheduler.Minute,
+		CaptureURL: captureURL,
+	}
+	sched := appsched.NewService(notifSvc, schedCfg)
+
+	daemonStore, err := infradaemon.NewStore()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error creating daemon store: %v\n", err)
+		os.Exit(1)
+	}
+
+	daemonSvc := appdaemon.NewService(daemonStore, notifSvc, sched, cfg.Capture)
+
+	switch args[0] {
+	case "start":
+		err = daemonSvc.Start(ctx)
+	case "stop":
+		err = daemonSvc.Stop(ctx)
+	case "restart":
+		if e := daemonSvc.Stop(ctx); e != nil {
+			fmt.Fprintf(os.Stderr, "Warning: %v\n", e)
+		}
+		err = daemonSvc.Start(ctx)
+	case "status":
+		err = cli.RunDaemonStatus(ctx, daemonSvc)
+	case "test-noti":
+		if notifSvc == nil {
+			err = fmt.Errorf("notification not configured: enable notifications in config or set STORY_NOTIFY_ENABLED=true")
+		} else {
+			err = cli.RunTestNoti(ctx, notifSvc, captureURL)
+		}
+	}
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func runDaemon(ctx context.Context, app *bootstrap.Application) error {
+	log := app.Logger.With(logger.F("component", "daemon"))
+	log.Debug("daemon starting")
+
+	notifProvider, err := infranotif.NewProvider(app.Config.Notify)
+	if err != nil {
+		log.Debug("notification not available")
+	}
+	var notifSvc *appnotif.Service
+	if notifProvider != nil {
+		notifSvc = appnotif.NewService(notifProvider)
+	}
+
+	captureURL := fmt.Sprintf("http://%s:%d/capture.html", app.Config.Capture.Host, app.Config.Capture.Port)
+
+	schedCfg := appsched.Config{
+		Enabled:    app.Config.Scheduler.Enabled,
+		Hour:       app.Config.Scheduler.Hour,
+		Minute:     app.Config.Scheduler.Minute,
+		CaptureURL: captureURL,
+	}
+	sched := appsched.NewService(notifSvc, schedCfg)
+
+	rawEntryRepo := repository.NewRawEntryRepository(app.DB)
+	rawEntrySvc := raw_entry.NewService(rawEntryRepo)
+
+	captureSvr := api.NewCaptureServer(app.Config.Capture.Host, app.Config.Capture.Port, rawEntrySvc)
+
+	go func() {
+		if err := captureSvr.Start(ctx); err != nil {
+			log.Error("capture server error", logger.F("error", err.Error()))
+		}
+	}()
+
+	tagRepo := repository.NewTagRepository(app.DB)
+	resourceRepo := repository.NewResourceRepository(app.DB)
+	entryRepo := repository.NewEntryRepository(app.DB)
+	entrySvc := entry.NewService(entryRepo, tagRepo, resourceRepo)
+
+	llmProvider, llmErr := llm.NewProvider(app.Config.LLM)
+	var llmAdapter *llm.CompleteAdapter
+	if llmErr == nil {
+		llmAdapter = llm.NewCompleteAdapter(llmProvider)
+	}
+	tweetRepo := repository.NewTweetRepository(app.DB)
+	promptRepo := repository.NewPromptTemplateRepository(app.DB)
+	tweetSvc := content.NewService(tweetRepo, promptRepo, entryRepo, llmAdapter)
+
+	proc := processor.NewService(rawEntrySvc, entrySvc, tweetSvc)
+	go proc.Start(ctx)
+
+	sched.Start(ctx)
+
+	log.Debug("daemon ready")
+
+	<-ctx.Done()
+	sched.Stop()
+	log.Debug("daemon stopped")
+	return nil
+}
+
+func start(ctx context.Context, app *bootstrap.Application) error {
 	passwordHasher := infraauth.NewPasswordHasher()
 
 	jwtService, err := infraauth.NewJWTTokenService(app.Config.Auth)
@@ -405,7 +564,7 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 	llmProvider, llmErr := llm.NewProvider(app.Config.LLM)
 	var llmAdapter *llm.CompleteAdapter
 	if llmErr != nil {
-		log.Warn("LLM provider not configured, tweet generation will be unavailable", logger.F("error", llmErr.Error()))
+		// LLM not configured — tweet generation unavailable
 	} else {
 		llmAdapter = llm.NewCompleteAdapter(llmProvider)
 	}
@@ -414,7 +573,7 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 	promptRepo := repository.NewPromptTemplateRepository(app.DB)
 	tweetSvc := content.NewService(tweetRepo, promptRepo, entryRepo, llmAdapter)
 
-	apiServer := api.NewServer(app.Config.Server.Host, app.Config.Server.Port, tweetSvc, entrySvc, jwtService)
+	apiServer := api.NewServer(app.Config.Server.Host, app.Config.Server.Port, tweetSvc, entrySvc, rawEntrySvc, jwtService)
 
 	deps := &cli.Dependencies{
 		Cfg:               app.Config,
@@ -430,8 +589,6 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 		ApiServer:         apiServer,
 	}
 
-	log.Info("application initialized")
-
 	if err := checkDatabaseSetup(ctx, app.DB); err != nil {
 		return err
 	}
@@ -440,5 +597,3 @@ func start(ctx context.Context, app *bootstrap.Application) error {
 
 	return nil
 }
-
-

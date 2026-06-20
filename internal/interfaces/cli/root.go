@@ -10,7 +10,9 @@ import (
 	"github.com/anomalyco/story/internal/application/auth"
 	"github.com/anomalyco/story/internal/application/collection"
 	"github.com/anomalyco/story/internal/application/content"
+	"github.com/anomalyco/story/internal/application/daemon"
 	"github.com/anomalyco/story/internal/application/entry"
+	appnotif "github.com/anomalyco/story/internal/application/notification"
 	"github.com/anomalyco/story/internal/application/publishing"
 	"github.com/anomalyco/story/internal/application/raw_entry"
 	"github.com/anomalyco/story/internal/application/resource"
@@ -32,6 +34,8 @@ type Dependencies struct {
 	TweetService      *content.Service
 	RawEntryService   *raw_entry.Service
 	ApiServer         *api.Server
+	NotifService      *appnotif.Service
+	DaemonService     *daemon.Service
 }
 
 func NewRootCommand(deps *Dependencies) *cobra.Command {
@@ -81,6 +85,12 @@ Founder: https://github.com/wantedbear007`,
 	root.AddCommand(newRawCommand(deps))
 	root.AddCommand(newProcessCommand(deps))
 	root.AddCommand(newResetCommand(deps))
+
+	root.AddCommand(newStartCommand(deps))
+	root.AddCommand(newStopCommand(deps))
+	root.AddCommand(newRestartCommand(deps))
+	root.AddCommand(newStartStatusCommand(deps))
+	root.AddCommand(newTestNotiCommand(deps))
 
 	return root
 }
@@ -346,6 +356,7 @@ func runWhoami() error {
 	}
 
 	fmt.Printf("Logged in as %s (%s)\n", s.DisplayName, s.Email)
+	fmt.Printf("User ID: %s\n", s.UserID)
 	return nil
 }
 

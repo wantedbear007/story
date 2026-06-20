@@ -17,8 +17,11 @@ type Config struct {
 	Server   ServerConfig   `yaml:"server"`
 	Database DatabaseConfig `yaml:"database"`
 	Auth     AuthConfig     `yaml:"auth"`
-	LLM      LLMConfig      `yaml:"llm"`
-	SMTP     SMTPConfig     `yaml:"smtp"`
+	LLM      LLMConfig           `yaml:"llm"`
+	SMTP     SMTPConfig          `yaml:"smtp"`
+	Capture  CaptureConfig       `yaml:"capture"`
+	Notify   NotificationConfig  `yaml:"notify"`
+	Scheduler SchedulerConfig    `yaml:"scheduler"`
 }
 
 type AppConfig struct {
@@ -100,6 +103,23 @@ func (s SMTPConfig) DSN() string {
 	return fmt.Sprintf("%s:%d", s.Host, s.Port)
 }
 
+type CaptureConfig struct {
+	Host string `yaml:"host"`
+	Port int    `yaml:"port"`
+}
+
+type NotificationConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	Title   string `yaml:"title"`
+	Message string `yaml:"message"`
+}
+
+type SchedulerConfig struct {
+	Enabled bool `yaml:"enabled"`
+	Hour    int  `yaml:"hour"`
+	Minute  int  `yaml:"minute"`
+}
+
 // Load reads configuration from a YAML file and applies environment variable overrides.
 // Environment variables take precedence over file values.
 // The secrets pattern (STORY_*) is used for sensitive values.
@@ -148,6 +168,20 @@ func Load(path string) (*Config, error) {
 		SMTP: SMTPConfig{
 			Host: "localhost",
 			Port: 1025,
+		},
+		Capture: CaptureConfig{
+			Host: "127.0.0.1",
+			Port: 8081,
+		},
+		Notify: NotificationConfig{
+			Enabled: true,
+			Title:   "Story",
+			Message: "Time to capture what you learned today",
+		},
+		Scheduler: SchedulerConfig{
+			Enabled: true,
+			Hour:    19,
+			Minute:  0,
 		},
 	}
 
@@ -214,6 +248,18 @@ func applyEnvOverrides(cfg *Config) {
 	}
 	if v := os.Getenv("STORY_SERVER_PORT"); v != "" {
 		fmt.Sscanf(v, "%d", &cfg.Server.Port)
+	}
+	if v := os.Getenv("STORY_CAPTURE_HOST"); v != "" {
+		cfg.Capture.Host = v
+	}
+	if v := os.Getenv("STORY_CAPTURE_PORT"); v != "" {
+		fmt.Sscanf(v, "%d", &cfg.Capture.Port)
+	}
+	if v := os.Getenv("STORY_NOTIFY_ENABLED"); v != "" {
+		cfg.Notify.Enabled = v == "true"
+	}
+	if v := os.Getenv("STORY_SCHEDULER_ENABLED"); v != "" {
+		cfg.Scheduler.Enabled = v == "true"
 	}
 }
 

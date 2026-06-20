@@ -36,11 +36,6 @@ func Run(ctx context.Context, cfgPath string, start func(context.Context, *Appli
 	}
 	defer app.Shutdown()
 
-	app.Logger.Info("application started",
-		logger.F("name", app.Config.App.Name),
-		logger.F("environment", app.Config.App.Environment),
-	)
-
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -48,7 +43,7 @@ func Run(ctx context.Context, cfgPath string, start func(context.Context, *Appli
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
 	go func() {
 		sig := <-sigCh
-		app.Logger.Info("received shutdown signal", logger.F("signal", sig.String()))
+		app.Logger.Debug("received shutdown signal", logger.F("signal", sig.String())) //nolint:errcheck
 		cancel()
 	}()
 
@@ -96,5 +91,5 @@ func (a *Application) Shutdown() {
 	if a.DB != nil {
 		a.DB.Close()
 	}
-	a.Logger.Info("application shutdown complete")
+	// shutdown complete
 }
