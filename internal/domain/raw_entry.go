@@ -23,7 +23,8 @@ const (
 	RawEntrySourceFile   RawEntrySource = "file"
 	RawEntrySourcePipe   RawEntrySource = "pipe"
 	RawEntrySourceImport RawEntrySource = "import"
-	RawEntrySourceAPI    RawEntrySource = "api"
+	RawEntrySourceAPI               RawEntrySource = "api"
+	RawEntrySourceNotificationCapture RawEntrySource = "notification_capture"
 )
 
 type RawEntry struct {
@@ -63,6 +64,7 @@ type RawEntryRepository interface {
 	Create(ctx context.Context, entry *RawEntry) error
 	GetByID(ctx context.Context, id uuid.UUID) (*RawEntry, error)
 	List(ctx context.Context, filter RawEntryFilter) ([]*RawEntry, error)
+	UpdateContent(ctx context.Context, id uuid.UUID, content string) error
 	UpdateStatus(ctx context.Context, id uuid.UUID, status RawEntryStatus) error
 	Delete(ctx context.Context, id uuid.UUID) error
 }

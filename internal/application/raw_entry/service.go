@@ -77,6 +77,27 @@ func (s *Service) List(ctx context.Context, req ListRawEntriesRequest) (*ListRaw
 	return resp, nil
 }
 
+func (s *Service) UpdateContent(ctx context.Context, id, userID uuid.UUID, content string) (*RawEntryResponse, error) {
+	if content == "" {
+		return nil, fmt.Errorf("%w: content is required", domain.ErrInvalidInput)
+	}
+	entry, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("updating raw entry: %w", err)
+	}
+	if entry.UserID != userID {
+		return nil, fmt.Errorf("%w: raw entry not found", domain.ErrNotFound)
+	}
+
+	if err := s.repo.UpdateContent(ctx, id, content); err != nil {
+		return nil, fmt.Errorf("updating raw entry: %w", err)
+	}
+
+	entry.Content = content
+	resp := EntryToResponse(entry)
+	return &resp, nil
+}
+
 func (s *Service) UpdateStatus(ctx context.Context, id, userID uuid.UUID, status domain.RawEntryStatus) (*RawEntryResponse, error) {
 	entry, err := s.repo.GetByID(ctx, id)
 	if err != nil {

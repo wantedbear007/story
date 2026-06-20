@@ -106,6 +106,19 @@ func (r *RawEntryRepository) List(ctx context.Context, filter domain.RawEntryFil
 	return entries, nil
 }
 
+func (r *RawEntryRepository) UpdateContent(ctx context.Context, id uuid.UUID, content string) error {
+	query := `
+		UPDATE raw_entries
+		SET content = $1, updated_at = $2
+		WHERE id = $3
+	`
+	_, err := r.pool.Exec(ctx, query, content, time.Now(), id)
+	if err != nil {
+		return fmt.Errorf("updating raw entry content: %w", err)
+	}
+	return nil
+}
+
 func (r *RawEntryRepository) UpdateStatus(ctx context.Context, id uuid.UUID, status domain.RawEntryStatus) error {
 	query := `
 		UPDATE raw_entries
