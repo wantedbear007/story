@@ -46,10 +46,12 @@ type Service struct {
 	entryRepo  domain.EntryRepository
 	provider   LLMProvider
 
-	mu             sync.Mutex
-	lastHealthy    bool
-	lastCheckTime  time.Time
-	onHealthy      chan struct{}
+	mu               sync.Mutex
+	lastHealthy      bool
+	lastCheckTime    time.Time
+	healthyStreak    int
+	unhealthyStreak  int
+	onHealthy        chan struct{}
 }
 
 func NewService(
@@ -94,15 +96,29 @@ func (s *Service) IsHealthy(ctx context.Context) bool {
 	_, err := s.provider.Complete(probeCtx, "Say 'Hello from Story!' in one short sentence.", 50)
 
 	s.mu.Lock()
-	ok := err == nil
-	if ok && !s.lastHealthy {
-		select {
-		case s.onHealthy <- struct{}{}:
-		default:
+	s.lastCheckTime = time.Now()
+	probeOk := err == nil
+
+	const threshold = 2
+	if probeOk {
+		s.healthyStreak++
+		s.unhealthyStreak = 0
+		if s.healthyStreak >= threshold && !s.lastHealthy {
+			s.lastHealthy = true
+			select {
+			case s.onHealthy <- struct{}{}:
+			default:
+			}
+		}
+	} else {
+		s.unhealthyStreak++
+		s.healthyStreak = 0
+		if s.unhealthyStreak >= threshold && s.lastHealthy {
+			s.lastHealthy = false
 		}
 	}
-	s.lastHealthy = ok
-	s.lastCheckTime = time.Now()
+
+	ok := s.lastHealthy
 	s.mu.Unlock()
 	return ok
 }
