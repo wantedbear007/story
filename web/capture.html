@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Capture - Story</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #1a1a2e;
+      color: #e0e0e0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      min-height: 100vh;
+    }
+    .container { width: 100%; max-width: 600px; padding: 2rem; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.5rem; color: #fff; }
+    p { color: #888; margin-bottom: 1.5rem; }
+    textarea {
+      width: 100%;
+      height: 200px;
+      padding: 1rem;
+      border: 1px solid #333;
+      border-radius: 8px;
+      background: #16213e;
+      color: #e0e0e0;
+      font-size: 1rem;
+      resize: vertical;
+      margin-bottom: 1rem;
+    }
+    textarea:focus { outline: none; border-color: #0f3460; }
+    button {
+      width: 100%;
+      padding: 0.75rem;
+      border: none;
+      border-radius: 8px;
+      background: #0f3460;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+    }
+    button:hover { background: #1a5276; }
+    .success { color: #4caf50; margin-top: 1rem; display: none; }
+    .error { color: #f44336; margin-top: 1rem; display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Quick Capture</h1>
+    <p id="subtitle">What did you learn or do?</p>
+    <textarea id="content" placeholder="Type your note here..."></textarea>
+    <button id="save-btn">Save</button>
+    <div id="success" class="success">Saved!</div>
+    <div id="error" class="error"></div>
+  </div>
+  <script>
+    (async () => {
+      const res = await fetch("/api/capture/whoami");
+      const data = await res.json();
+      if (data.user_id) {
+        localStorage.setItem("story_user_id", data.user_id);
+        document.getElementById("content").focus();
+      } else {
+        document.getElementById("subtitle").textContent = "Run 'story capture' from your terminal to authenticate.";
+        document.getElementById("save-btn").disabled = true;
+      }
+    })();
+
+    document.getElementById("save-btn").addEventListener("click", async () => {
+      const content = document.getElementById("content").value.trim();
+      if (!content) return;
+
+      const uid = localStorage.getItem("story_user_id");
+      if (!uid) {
+        document.getElementById("error").textContent = "Not authenticated. Run 'story capture' from your terminal.";
+        document.getElementById("error").style.display = "block";
+        return;
+      }
+
+      const res = await fetch("/api/capture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content, user_id: uid }),
+      });
+
+      if (res.ok) {
+        document.getElementById("success").style.display = "block";
+        document.getElementById("error").style.display = "none";
+        document.getElementById("content").value = "";
+        setTimeout(() => {
+          document.getElementById("success").style.display = "none";
+        }, 2000);
+      } else {
+        const err = await res.json();
+        document.getElementById("error").textContent = err.error || "Failed to save";
+        document.getElementById("error").style.display = "block";
+      }
+    });
+  </script>
+</body>
+</html>
