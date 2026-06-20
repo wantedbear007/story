@@ -25,6 +25,7 @@ const (
 	RawEntrySourcePipe   RawEntrySource = "pipe"
 	RawEntrySourceImport RawEntrySource = "import"
 	RawEntrySourceAPI               RawEntrySource = "api"
+	RawEntrySourceWeb               RawEntrySource = "web"
 	RawEntrySourceNotificationCapture RawEntrySource = "notification_capture"
 )
 
