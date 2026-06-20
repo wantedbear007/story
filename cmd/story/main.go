@@ -174,6 +174,10 @@ func showFullHelp(args []string) {
 		Short: "View and manage configuration",
 	})
 	root.AddCommand(&cobra.Command{
+		Use:   "llm-config",
+		Short: "Configure LLM provider settings",
+	})
+	root.AddCommand(&cobra.Command{
 		Use:   "resource",
 		Short: "Manage resources",
 	})
