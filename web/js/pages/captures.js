@@ -47,12 +47,13 @@ const CapturesPage = {
     const words = e.content.split(/\s+/).filter(Boolean).length;
     const ready = e.status === 'structured';
     const isRaw = e.status === 'raw';
+    const isFailed = e.status === 'failed';
     const src = e.source === 'notification_capture' ? 'Notification' : e.source === 'cli' ? 'CLI' : 'Web';
 
     return `
       <div class="capture-card" id="capture-${e.id}">
         <div class="capture-card-header">
-          <span class="mat-chip ${ready ? 'ready' : isRaw ? 'pending' : ''}">${ready ? 'Ready' : isRaw ? 'Pending' : e.status}</span>
+          <span class="mat-chip ${isFailed ? 'failed' : ready ? 'ready' : isRaw ? 'pending' : ''}">${isFailed ? 'Failed' : ready ? 'Ready' : isRaw ? 'Pending' : e.status}</span>
           <span class="mat-chip">${src}</span>
           <span class="caption" style="margin-left:auto">${fmtDate(e.created_at)}</span>
         </div>
@@ -60,7 +61,7 @@ const CapturesPage = {
         <div class="capture-card-footer">
           <span class="caption">${words} words</span>
           <span class="meta-sep">·</span>
-          <span class="caption">${ready ? 'Tweet ready' : 'Waiting for LLM'}</span>
+          <span class="caption">${isFailed ? 'Conversion failed' : ready ? 'Tweet ready' : 'Waiting for LLM'}</span>
           <button class="btn-icon" onclick="CapturesPage.del('${e.id}')" title="Delete">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
           </button>

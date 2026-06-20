@@ -74,7 +74,7 @@ func (s *Service) processOne(ctx context.Context, re raw_entry.RawEntryResponse)
 		Content: re.Content,
 	})
 	if err != nil {
-		s.rawEntrySvc.UpdateStatus(ctx, id, re.UserID, domain.RawEntryStatusRAW)
+		s.rawEntrySvc.UpdateStatus(ctx, id, re.UserID, domain.RawEntryStatusFailed)
 		return fmt.Errorf("create entry: %w", err)
 	}
 
@@ -82,9 +82,7 @@ func (s *Service) processOne(ctx context.Context, re raw_entry.RawEntryResponse)
 		EntryID: entryResp.ID,
 	})
 	if err != nil {
-		if strings.Contains(err.Error(), "LLM provider not configured") {
-			s.rawEntrySvc.UpdateStatus(ctx, id, re.UserID, domain.RawEntryStatusRAW)
-		}
+		s.rawEntrySvc.UpdateStatus(ctx, id, re.UserID, domain.RawEntryStatusFailed)
 		return fmt.Errorf("generate tweet: %w", err)
 	}
 

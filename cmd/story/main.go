@@ -24,6 +24,7 @@ import (
 	"github.com/anomalyco/story/internal/infrastructure/bootstrap"
 	"github.com/anomalyco/story/internal/infrastructure/config"
 	infradaemon "github.com/anomalyco/story/internal/infrastructure/daemon"
+	"github.com/anomalyco/story/internal/infrastructure/database"
 	"github.com/anomalyco/story/internal/infrastructure/email"
 	"github.com/anomalyco/story/internal/infrastructure/llm"
 	infranotif "github.com/anomalyco/story/internal/infrastructure/notification"
@@ -445,7 +446,21 @@ func runDaemonCommand(ctx context.Context, args []string) {
 		}
 		err = daemonSvc.Start(ctx)
 	case "status":
-		err = cli.RunDaemonStatus(ctx, daemonSvc)
+		var stats *cli.PipelineStats
+		pool, poolErr := database.NewPool(ctx, cfg.Database)
+		if poolErr == nil {
+			stats = &cli.PipelineStats{}
+			pool.QueryRow(ctx,
+				`SELECT
+					COALESCE(SUM(CASE WHEN status='raw' THEN 1 ELSE 0 END), 0),
+					COALESCE(SUM(CASE WHEN status='processing' THEN 1 ELSE 0 END), 0),
+					COALESCE(SUM(CASE WHEN status='structured' THEN 1 ELSE 0 END), 0),
+					COALESCE(SUM(CASE WHEN status='failed' THEN 1 ELSE 0 END), 0)
+				FROM raw_entries`,
+			).Scan(&stats.Raw, &stats.Processing, &stats.Structured, &stats.Failed)
+			pool.Close()
+		}
+		err = cli.RunDaemonStatus(ctx, daemonSvc, stats)
 	case "test-noti":
 		if notifSvc == nil {
 			err = fmt.Errorf("notification not configured: enable notifications in config or set STORY_NOTIFY_ENABLED=true")

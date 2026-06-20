@@ -300,6 +300,7 @@ body {
 .mat-chip.processing { background: #8ab4f8; color: #0f0f11; }
 .mat-chip.ready { background: #81c995; color: #0f0f11; }
 .mat-chip.pending { background: #fdd663; color: #0f0f11; }
+.mat-chip.failed { background: #f28b82; color: #0f0f11; }
 
 /* ─── Status Bar (Tab buttons) ─── */
 .status-bar {

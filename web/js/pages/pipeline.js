@@ -25,6 +25,7 @@ const PipelinePage = {
       const raw = rawEntries.filter(e => e.status === 'raw').length;
       const processing = rawEntries.filter(e => e.status === 'processing').length;
       const structured = rawEntries.filter(e => e.status === 'structured').length;
+      const failed = rawEntries.filter(e => e.status === 'failed').length;
       const llmOk = config.llm_configured;
 
       root.innerHTML = `
@@ -59,6 +60,16 @@ const PipelinePage = {
             <div class="pipeline-stage-desc">Tweets ready</div>
           </div>
         </div>
+
+        ${failed > 0 ? `
+          <div class="pipeline-stage stage-failed" style="margin-top:16px;text-align:center;background:#1c1c1f;border:1px solid #f28b8240;border-radius:16px;padding:16px;">
+            <div class="pipeline-stage-value" style="color:#f28b82;font-size:1.75rem;font-weight:500;line-height:1.2">${failed}</div>
+            <div class="pipeline-stage-label" style="font-size:0.75rem;color:#f28b82;margin-top:4px;font-weight:500">Failed</div>
+            <div class="pipeline-stage-desc" style="font-size:0.6875rem;color:#5f5f63;margin-top:6px">
+              Conversion failed · check LLM config or edit in Captures
+            </div>
+          </div>
+        ` : ''}
 
         <div class="pipeline-summary">
           <div class="stat-card">

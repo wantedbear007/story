@@ -14,6 +14,7 @@ const (
 	RawEntryStatusProcessing RawEntryStatus = "processing"
 	RawEntryStatusStructured RawEntryStatus = "structured"
 	RawEntryStatusArchived   RawEntryStatus = "archived"
+	RawEntryStatusFailed     RawEntryStatus = "failed"
 )
 
 type RawEntrySource string
