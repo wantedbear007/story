@@ -10,7 +10,20 @@ const PipelinePage = {
   async load() {
     const root = document.getElementById('pipeline-root');
     if (!root) return;
-    root.innerHTML = '<div class="empty-state" style="padding:40px 20px"><p>Loading...</p></div>';
+    root.innerHTML = `
+      <div style="text-align:center;padding:60px 20px">
+        <div style="font-size:1rem;color:#9e9ea2;margin-bottom:8px">Testing LLM connection...</div>
+        <div style="font-size:0.8125rem;color:#5f5f63">Checking provider, loading captures</div>
+        <div style="margin-top:24px;display:flex;justify-content:center;gap:8px">
+          <div style="width:8px;height:8px;border-radius:50%;background:#3c3c3f;animation:pulse 1.2s infinite"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:#3c3c3f;animation:pulse 1.2s infinite 0.2s"></div>
+          <div style="width:8px;height:8px;border-radius:50%;background:#3c3c3f;animation:pulse 1.2s infinite 0.4s"></div>
+        </div>
+      </div>
+      <style>
+        @keyframes pulse { 0%,100% { opacity:0.3; } 50% { opacity:1; } }
+      </style>
+    `;
 
     try {
       const [config, rawData, tweetData] = await Promise.all([
