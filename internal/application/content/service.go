@@ -60,6 +60,10 @@ func NewService(
 	}
 }
 
+func (s *Service) IsLLMConfigured() bool {
+	return s.provider != nil
+}
+
 type GenerateResult struct {
 	Content      string
 	ProviderName string

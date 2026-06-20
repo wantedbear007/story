@@ -1,11 +1,13 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"github.com/google/uuid"
 	"github.com/anomalyco/story/internal/application/entry"
+	"github.com/anomalyco/story/internal/domain"
 )
 
 func (s *Server) handleListEntries(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +41,49 @@ func (s *Server) handleListEntries(w http.ResponseWriter, r *http.Request) {
 		"total":   resp.Total,
 		"page":    resp.Page,
 	})
+}
+
+func (s *Server) handleCreateEntry(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userUUIDFromCtx(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Type    string   `json:"type"`
+		Title   string   `json:"title"`
+		Content string   `json:"content"`
+		Tags    []string `json:"tags,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Content == "" {
+		writeError(w, http.StatusBadRequest, "content is required")
+		return
+	}
+	if req.Title == "" {
+		writeError(w, http.StatusBadRequest, "title is required")
+		return
+	}
+	if req.Type == "" {
+		req.Type = "learning"
+	}
+
+	resp, err := s.entryService.Create(r.Context(), userID, entry.CreateEntryRequest{
+		Type:    domain.EntryType(req.Type),
+		Title:   req.Title,
+		Content: req.Content,
+		Tags:    req.Tags,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, resp)
 }
 
 func (s *Server) handleGetEntry(w http.ResponseWriter, r *http.Request) {

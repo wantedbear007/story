@@ -15,6 +15,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/anomalyco/story/internal/application/content"
 	"github.com/anomalyco/story/internal/application/entry"
+	"github.com/anomalyco/story/internal/application/raw_entry"
+	"github.com/anomalyco/story/internal/domain"
 	"github.com/anomalyco/story/internal/infrastructure/auth"
 	"github.com/anomalyco/story/web"
 )
@@ -70,14 +72,15 @@ func (s *LoginCodeStore) Exchange(code string) (string, bool) {
 }
 
 type Server struct {
-	host         string
-	port         int
-	tweetService *content.Service
-	entryService *entry.Service
-	jwtService   *auth.JWTTokenService
-	loginCodes   *LoginCodeStore
-	httpServer   *http.Server
-	authURL      string
+	host           string
+	port           int
+	tweetService   *content.Service
+	entryService   *entry.Service
+	rawEntryService *raw_entry.Service
+	jwtService     *auth.JWTTokenService
+	loginCodes     *LoginCodeStore
+	httpServer     *http.Server
+	authURL        string
 }
 
 func NewServer(
@@ -85,15 +88,17 @@ func NewServer(
 	port int,
 	tweetService *content.Service,
 	entryService *entry.Service,
+	rawEntryService *raw_entry.Service,
 	jwtService *auth.JWTTokenService,
 ) *Server {
 	return &Server{
-		host:         host,
-		port:         port,
-		tweetService: tweetService,
-		entryService: entryService,
-		jwtService:   jwtService,
-		loginCodes:   NewLoginCodeStore(),
+		host:            host,
+		port:            port,
+		tweetService:    tweetService,
+		entryService:    entryService,
+		rawEntryService: rawEntryService,
+		jwtService:      jwtService,
+		loginCodes:      NewLoginCodeStore(),
 	}
 }
 
@@ -151,7 +156,13 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("GET /api/tweets/{id}/audits", s.authMiddleware(s.handleGetAudits))
 
 	mux.HandleFunc("GET /api/entries", s.authMiddleware(s.handleListEntries))
+	mux.HandleFunc("POST /api/entries", s.authMiddleware(s.handleCreateEntry))
 	mux.HandleFunc("GET /api/entries/{id}", s.authMiddleware(s.handleGetEntry))
+
+	mux.HandleFunc("GET /api/raw-entries", s.authMiddleware(s.handleListRawEntries))
+	mux.HandleFunc("POST /api/raw-entries", s.authMiddleware(s.handleCreateRawEntry))
+	mux.HandleFunc("PUT /api/raw-entries/{id}", s.authMiddleware(s.handleUpdateRawEntry))
+	mux.HandleFunc("DELETE /api/raw-entries/{id}", s.authMiddleware(s.handleDeleteRawEntry))
 
 	mux.HandleFunc("GET /api/prompts", s.authMiddleware(s.handleListPrompts))
 
@@ -160,6 +171,8 @@ func (s *Server) Start(ctx context.Context) error {
 	mux.HandleFunc("GET /api/ping", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"ok": "true"})
 	})
+
+	mux.HandleFunc("GET /api/config", s.authMiddleware(s.handleConfig))
 
 	mux.HandleFunc("GET /api/exchange/{code}", s.handleExchangeCode)
 
@@ -280,6 +293,129 @@ func noCacheMiddleware(next http.Handler) http.Handler {
 		w.Header().Set("Pragma", "no-cache")
 		w.Header().Set("Expires", "0")
 		next.ServeHTTP(w, r)
+	})
+}
+
+func (s *Server) handleListRawEntries(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userUUIDFromCtx(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	statusStr := r.URL.Query().Get("status")
+	var parsedStatus *domain.RawEntryStatus
+	if statusStr != "" {
+		s := domain.RawEntryStatus(statusStr)
+		parsedStatus = &s
+	}
+
+	limit := parseIntParam(r.URL.Query().Get("limit"), 50)
+	offset := parseIntParam(r.URL.Query().Get("offset"), 0)
+
+	resp, err := s.rawEntryService.List(r.Context(), raw_entry.ListRawEntriesRequest{
+		UserID: userID,
+		Status: parsedStatus,
+		Limit:  limit,
+		Offset: offset,
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleCreateRawEntry(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userUUIDFromCtx(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	var req struct {
+		Content string `json:"content"`
+		Source  string `json:"source"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.Content == "" {
+		writeError(w, http.StatusBadRequest, "content is required")
+		return
+	}
+	if req.Source == "" {
+		req.Source = "web"
+	}
+
+	resp, err := s.rawEntryService.Create(r.Context(), userID, raw_entry.CreateRawEntryRequest{
+		Content: req.Content,
+		Source:  domain.RawEntrySource(req.Source),
+	})
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusCreated, resp)
+}
+
+func (s *Server) handleUpdateRawEntry(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userUUIDFromCtx(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	var req struct {
+		Content string `json:"content"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	resp, err := s.rawEntryService.UpdateContent(r.Context(), id, userID, req.Content)
+	if err != nil {
+		writeError(w, httpStatusCode(err), err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, resp)
+}
+
+func (s *Server) handleDeleteRawEntry(w http.ResponseWriter, r *http.Request) {
+	userID, ok := userUUIDFromCtx(r.Context())
+	if !ok {
+		writeError(w, http.StatusUnauthorized, "unauthorized")
+		return
+	}
+
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	if err := s.rawEntryService.Delete(r.Context(), id, userID); err != nil {
+		writeError(w, httpStatusCode(err), err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"llm_configured": s.tweetService.IsLLMConfigured(),
 	})
 }
 
