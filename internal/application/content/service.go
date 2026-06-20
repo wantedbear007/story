@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"strings"
+	"sync"
 	"text/template"
 	"time"
 
@@ -44,6 +45,10 @@ type Service struct {
 	promptRepo domain.PromptTemplateRepository
 	entryRepo  domain.EntryRepository
 	provider   LLMProvider
+
+	mu             sync.Mutex
+	lastHealthy    bool
+	lastCheckTime  time.Time
 }
 
 func NewService(
@@ -62,6 +67,32 @@ func NewService(
 
 func (s *Service) IsLLMConfigured() bool {
 	return s.provider != nil
+}
+
+func (s *Service) IsHealthy(ctx context.Context) bool {
+	s.mu.Lock()
+	if s.provider == nil {
+		s.mu.Unlock()
+		return false
+	}
+	if time.Since(s.lastCheckTime) < 30*time.Second {
+		ok := s.lastHealthy
+		s.mu.Unlock()
+		return ok
+	}
+	s.mu.Unlock()
+
+	probeCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	_, err := s.provider.Complete(probeCtx, "ok", 1)
+
+	s.mu.Lock()
+	s.lastHealthy = err == nil
+	s.lastCheckTime = time.Now()
+	ok := s.lastHealthy
+	s.mu.Unlock()
+	return ok
 }
 
 type GenerateResult struct {

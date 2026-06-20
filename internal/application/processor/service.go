@@ -41,7 +41,7 @@ func (s *Service) Start(ctx context.Context) {
 }
 
 func (s *Service) processPending(ctx context.Context) {
-	if !s.tweetSvc.IsLLMConfigured() {
+	if !s.tweetSvc.IsHealthy(ctx) {
 		return
 	}
 

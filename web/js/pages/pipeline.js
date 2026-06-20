@@ -27,16 +27,24 @@ const PipelinePage = {
       const structured = rawEntries.filter(e => e.status === 'structured').length;
       const failed = rawEntries.filter(e => e.status === 'failed').length;
       const llmOk = config.llm_configured;
+      const llmHealthy = config.llm_healthy;
+
+      const llmStatus = !llmOk ? 'not-configured' : llmHealthy ? 'healthy' : 'unreachable';
 
       root.innerHTML = `
-        ${!llmOk ? `
+        ${llmStatus === 'not-configured' ? `
           <div class="pipeline-warning">
             <strong>LLM not configured</strong>
             <p>Set up an LLM provider (OpenAI, Gemini, or Anthropic) in your config or environment to enable automatic tweet generation from captures.</p>
           </div>
+        ` : llmStatus === 'unreachable' ? `
+          <div class="pipeline-warning" style="border-color:#f28b8240;background:#f28b8210">
+            <strong style="color:#f28b82">LLM unreachable</strong>
+            <p>LLM is configured but not responding. Check your API key, network connection, and provider status. Captures will not be processed until the LLM is reachable.</p>
+          </div>
         ` : `
           <div class="pipeline-info">
-            <strong>LLM configured</strong>
+            <strong>LLM connected ✓</strong>
             <p>Auto-summarization is active. New captures are processed every 30 seconds.</p>
           </div>
         `}
@@ -82,9 +90,9 @@ const PipelinePage = {
           </div>
         </div>
 
-        ${!llmOk && raw > 0 ? `
+        ${llmStatus !== 'healthy' && raw > 0 ? `
           <p class="caption" style="margin-top:20px;text-align:center">
-            ${raw} capture${raw > 1 ? 's are' : ' is'} waiting · configure LLM to auto-summarize
+            ${raw} capture${raw > 1 ? 's are' : ' is'} waiting · ${llmStatus === 'not-configured' ? 'configure LLM to auto-summarize' : 'LLM is unreachable'}
           </p>
         ` : ''}
       `;

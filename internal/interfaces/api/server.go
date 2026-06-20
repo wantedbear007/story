@@ -414,8 +414,10 @@ func (s *Server) handleDeleteRawEntry(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"llm_configured": s.tweetService.IsLLMConfigured(),
+		"llm_healthy":    s.tweetService.IsHealthy(ctx),
 	})
 }
 
