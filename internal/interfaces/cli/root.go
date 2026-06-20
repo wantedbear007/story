@@ -71,6 +71,7 @@ Founder: https://github.com/wantedbear007`,
 	root.AddCommand(newTargetCommand(deps))
 	root.AddCommand(newConfigCommand(deps))
 	root.AddCommand(newLLMConfigCommand())
+	root.AddCommand(newLLMCheckCommand())
 	root.AddCommand(newResourceCommand(deps))
 	root.AddCommand(newSearchCommand(deps))
 	root.AddCommand(newTweetCommand(deps))

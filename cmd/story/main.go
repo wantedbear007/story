@@ -178,6 +178,10 @@ func showFullHelp(args []string) {
 		Short: "Configure LLM provider settings",
 	})
 	root.AddCommand(&cobra.Command{
+		Use:   "llm-check",
+		Short: "Test LLM provider connectivity and response",
+	})
+	root.AddCommand(&cobra.Command{
 		Use:   "resource",
 		Short: "Manage resources",
 	})
