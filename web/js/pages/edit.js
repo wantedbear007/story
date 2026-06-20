@@ -30,7 +30,7 @@ const EditPage = {
     el.innerHTML = `
       <div class="tweet-detail-header">
         <div>
-          <h2>${t.status} (v${t.version})</h2>
+          <span class="status-badge ${t.status}" style="margin-bottom:8px;display:inline-block">${t.status} v${t.version}</span>
           <div class="tweet-detail-meta">
             <span>Provider: ${t.provider_name || 'N/A'}</span>
             <span>Model: ${t.model_name || 'N/A'}</span>
@@ -41,7 +41,7 @@ const EditPage = {
         </div>
         <div>
           <button class="btn btn-icon" onclick="EditPage.copy()" title="Copy content">📋</button>
-          <button class="btn btn-secondary btn-sm" onclick="App.navigate('drafts')">← Back</button>
+          <button class="btn btn-secondary btn-sm" onclick="App.navigate('tweets')">← Back</button>
         </div>
       </div>
       <textarea id="tweet-content" oninput="EditPage.onContentChange(this.value)">${escHtml(t.content)}</textarea>
@@ -57,7 +57,7 @@ const EditPage = {
         <button class="btn btn-danger btn-sm" onclick="EditPage.archive()" id="btn-archive">Archive</button>
       </div>
       <div class="tweet-detail-meta">
-        <span>Entry: <a href="#/resources?id=${t.entry_id}" onclick="App.navigate('resources', null, '${t.entry_id}')">${t.entry_id}</a></span>
+        <span>Entry: <a href="#/entries/${t.entry_id}" onclick="App.navigate('entries', '${t.entry_id}')">${t.entry_id}</a></span>
         <span>Prompt: ${t.prompt_name || 'N/A'} (v${t.prompt_version || '?'})</span>
       </div>
       <div class="tweet-audit" id="audit-section">

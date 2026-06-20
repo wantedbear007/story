@@ -1,7 +1,4 @@
 const App = {
-  currentPage: null,
-  currentParams: null,
-
   async init() {
     await this.handleUrlCode();
 
@@ -24,7 +21,6 @@ const App = {
     });
     document.getElementById('logout-link').addEventListener('click', e => {
       e.preventDefault();
-      this.stopHeartbeat();
       API.clearToken();
       this.showLogin();
     });
@@ -37,127 +33,78 @@ const App = {
     const params = new URLSearchParams(window.location.search);
     const code = params.get('code');
     if (!code) return;
-
     try {
       const token = await API.exchangeCode(code);
       API.setToken(token);
       window.history.replaceState({}, document.title, window.location.pathname);
-      showToast('Connected!', 'success');
+      showToast('Connected', 'success');
     } catch (err) {
-      showToast(err.message || 'Invalid or expired code', 'error');
+      showToast(err.message || 'Invalid code', 'error');
     }
   },
 
   async login() {
     const code = document.getElementById('code-input').value.trim();
     if (!code) return;
-
     try {
       const token = await API.exchangeCode(code);
       API.setToken(token);
       this.showMain();
       this.route();
     } catch (err) {
-      showToast(err.message || 'Invalid or expired code', 'error');
+      showToast(err.message || 'Invalid code', 'error');
     }
   },
 
   showLogin() {
     document.getElementById('login-view').style.display = 'flex';
     document.getElementById('main-view').style.display = 'none';
-    document.getElementById('nav-bar').style.display = 'none';
+    document.getElementById('sidebar').style.display = 'none';
   },
 
   showMain() {
     document.getElementById('login-view').style.display = 'none';
     document.getElementById('main-view').style.display = 'block';
-    document.getElementById('nav-bar').style.display = 'flex';
-    this.startHeartbeat();
-  },
-
-  heartbeatInterval: null,
-
-  startHeartbeat() {
-    this.stopHeartbeat();
-    this.heartbeatInterval = setInterval(async () => {
-      try {
-        const res = await fetch('/api/ping');
-        if (!res.ok) throw new Error('server gone');
-      } catch {
-        this.stopHeartbeat();
-        this.showDisconnected();
-      }
-    }, 3000);
-  },
-
-  stopHeartbeat() {
-    if (this.heartbeatInterval) {
-      clearInterval(this.heartbeatInterval);
-      this.heartbeatInterval = null;
-    }
-  },
-
-  showDisconnected() {
-    const content = document.getElementById('page-content');
-    if (content) {
-      content.innerHTML = '<div class="empty-state"><h2>Server Disconnected</h2><p>The dashboard server has shut down. Close this tab.</p></div>';
-    }
-    const nav = document.getElementById('nav-bar');
-    if (nav) nav.style.display = 'none';
+    document.getElementById('sidebar').style.display = 'flex';
   },
 
   route() {
-    const hash = window.location.hash.slice(1) || '/drafts';
-    const parts = hash.split('/').filter(Boolean);
-
-    let page = parts[0] || 'drafts';
-    const params = {};
-
-    if (parts.length > 1) {
-      if (page === 'edit') {
-        this.navigate('edit', parts[1]);
-        return;
-      }
-      if (page === 'resources' && parts[1]) {
-        params.id = parts[1];
-      }
-    }
-
-    this.renderPage(page, params);
+    const hash = window.location.hash.slice(1) || '/captures';
+    const page = hash.split('/').filter(Boolean)[0] || 'captures';
+    this.renderPage(page);
   },
 
-  async navigate(page, id, extra) {
-    let hash = `#/${page}`;
-    if (id) hash += `/${id}`;
-    if (extra && page === 'resources') hash = `#/resources?id=${extra}`;
-    window.location.hash = hash;
-    this.renderPage(page, { id, extra });
+  async navigate(page) {
+    window.location.hash = `#/${page}`;
+    this.renderPage(page);
   },
 
-  async renderPage(page, params) {
+  pages: {
+    captures: { title: 'Captures', render: () => CapturesPage.render(), after: () => CapturesPage.afterRender() },
+    created: { title: 'Created', render: () => CreatedPage.render(), after: () => CreatedPage.afterRender() },
+    pipeline: { title: 'Pipeline', render: () => PipelinePage.render(), after: () => PipelinePage.afterRender() },
+  },
+
+  async renderPage(page) {
     const content = document.getElementById('page-content');
+    const pageTitle = document.getElementById('page-title');
+    const pageActions = document.getElementById('page-actions');
     if (!content) return;
 
-    document.querySelectorAll('.nav-link[data-route]').forEach(l => {
-      l.classList.toggle('active', l.getAttribute('href') === `#/${page}` || (page === 'edit' && l.getAttribute('href') === '#/drafts'));
+    document.querySelectorAll('.sidebar-link[data-route]').forEach(l => {
+      l.classList.toggle('active', l.getAttribute('href') === `#/${page}`);
     });
 
-    switch (page) {
-      case 'drafts':
-        content.innerHTML = await DraftsPage.render();
-        await DraftsPage.afterRender();
-        break;
-      case 'edit':
-        content.innerHTML = await EditPage.render(params.id);
-        await EditPage.afterRender();
-        break;
-      case 'resources':
-        content.innerHTML = await ResourcesPage.render(params);
-        await ResourcesPage.afterRender();
-        break;
-      default:
-        content.innerHTML = '<div class="empty-state"><h2>Page not found</h2></div>';
+    const p = this.pages[page];
+    if (!p) {
+      content.innerHTML = '<div class="empty-state"><h2>Not found</h2></div>';
+      return;
     }
+
+    if (pageTitle) pageTitle.textContent = p.title;
+    if (pageActions) pageActions.innerHTML = '';
+    content.innerHTML = await p.render();
+    await p.after();
   },
 };
 
@@ -171,22 +118,22 @@ function escHtml(s) {
 function fmtDate(dateStr) {
   if (!dateStr) return '';
   const d = new Date(dateStr);
+  const now = new Date();
+  const diff = (now - d) / 1000;
+  if (diff < 60) return 'just now';
+  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
 function showToast(msg, type) {
   const existing = document.querySelector('.toast');
   if (existing) existing.remove();
-  const toast = document.createElement('div');
-  toast.className = `toast toast-${type}`;
-  toast.textContent = msg;
-  document.body.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
-}
-
-function setVisible(id, visible) {
-  const el = document.getElementById(id);
-  if (el) el.style.display = visible ? '' : 'none';
+  const t = document.createElement('div');
+  t.className = `toast toast-${type}`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => t.remove(), 3000);
 }
 
 document.addEventListener('DOMContentLoaded', () => App.init());
