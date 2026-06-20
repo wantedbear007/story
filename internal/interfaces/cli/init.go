@@ -251,7 +251,10 @@ func promptDefault(label, defaultValue string, validate func(string) string) str
 	for {
 		prompt := fmt.Sprintf("%s [%s]: ", label, defaultValue)
 		fmt.Fprint(os.Stderr, prompt)
-		input, _ := lineReader.ReadString('\n')
+		input, err := lineReader.ReadString('\n')
+		if err != nil {
+			os.Exit(0)
+		}
 		input = strings.TrimSpace(input)
 
 		if input == "" {
@@ -273,7 +276,10 @@ func promptDefault(label, defaultValue string, validate func(string) string) str
 func promptRequired(label string) string {
 	for {
 		fmt.Fprintf(os.Stderr, "%s: ", label)
-		input, _ := lineReader.ReadString('\n')
+		input, err := lineReader.ReadString('\n')
+		if err != nil {
+			os.Exit(0)
+		}
 		input = strings.TrimSpace(input)
 		if input != "" {
 			return input

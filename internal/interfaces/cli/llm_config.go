@@ -72,7 +72,10 @@ func runLLMConfig() error {
 			cfg.LLM.OpenAI.APIKey = promptRequired("OpenAI API key")
 		} else {
 			fmt.Fprintf(os.Stderr, "OpenAI API key [%s]: ", maskString(defaultKey))
-			input, _ := lineReader.ReadString('\n')
+			input, err := lineReader.ReadString('\n')
+			if err != nil {
+				os.Exit(0)
+			}
 			input = strings.TrimSpace(input)
 			if input != "" {
 				cfg.LLM.OpenAI.APIKey = input
@@ -102,7 +105,10 @@ func runLLMConfig() error {
 			cfg.LLM.Gemini.APIKey = promptRequired("Gemini API key")
 		} else {
 			fmt.Fprintf(os.Stderr, "Gemini API key [%s]: ", maskString(defaultKey))
-			input, _ := lineReader.ReadString('\n')
+			input, err := lineReader.ReadString('\n')
+			if err != nil {
+				os.Exit(0)
+			}
 			input = strings.TrimSpace(input)
 			if input != "" {
 				cfg.LLM.Gemini.APIKey = input
@@ -156,7 +162,10 @@ func runLLMConfig() error {
 			cfg.LLM.Anthropic.APIKey = promptRequired("Anthropic API key")
 		} else {
 			fmt.Fprintf(os.Stderr, "Anthropic API key [%s]: ", maskString(defaultKey))
-			input, _ := lineReader.ReadString('\n')
+			input, err := lineReader.ReadString('\n')
+			if err != nil {
+				os.Exit(0)
+			}
 			input = strings.TrimSpace(input)
 			if input != "" {
 				cfg.LLM.Anthropic.APIKey = input

@@ -344,14 +344,20 @@ func deviceInfo() string {
 // promptPassword reads a password from stdin (no echo).
 func promptPassword(prompt string) string {
 	fmt.Fprint(os.Stderr, prompt)
-	s, _ := lineReader.ReadString('\n')
+	s, err := lineReader.ReadString('\n')
+	if err != nil {
+		os.Exit(0)
+	}
 	return strings.TrimSpace(s)
 }
 
 // promptInput reads a line from stdin.
 func promptInput(prompt string) string {
 	fmt.Fprint(os.Stderr, prompt)
-	s, _ := lineReader.ReadString('\n')
+	s, err := lineReader.ReadString('\n')
+	if err != nil {
+		os.Exit(0)
+	}
 	return strings.TrimSpace(s)
 }
 
